@@ -41,8 +41,9 @@ def _evidence(raw, n_replies: int) -> list[int]:
     return sorted(out)
 
 
-async def evaluate(record: dict, config: dict, provider, *, only=None, mask_pii: bool = True) -> dict:
+async def evaluate(record: dict, config: dict, provider, *, only=None, mask_pii: bool = True, precedents=None) -> dict:
     from ..incremental import fingerprints
+    from ..precedents import block
 
     pid = provider.pid
     ids = {c["id"] for c in config["criteria"]} if only is None else set(only)
@@ -53,6 +54,10 @@ async def evaluate(record: dict, config: dict, provider, *, only=None, mask_pii:
     tr = record["transcript"]
     masked, pii = mask_transcript(tr) if mask_pii else (tr, [])
     system, user = build_system(config), build_user(record, masked)
+    if precedents:
+        examples = ([{**p, "transcript": mask_transcript(p["transcript"])[0]} for p in precedents]
+                    if mask_pii else precedents)
+        user = block(examples, config) + user
     schema = build_schema({**config, "criteria": selected})
     if only is not None and len(selected) < len(config["criteria"]):  # все критерии — ровно прежний промпт
         user += "\n\nОцени только критерии: " + ", ".join(c["id"] for c in selected) + ". Остальные не оценивай"

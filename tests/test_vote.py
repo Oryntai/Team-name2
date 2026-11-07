@@ -158,7 +158,8 @@ def test_evaluate_voted_handles_raised_exceptions(monkeypatch, success):
 def run_one(monkeypatch, responses, *, votes=3, previous=None, mode="full", config=CFG):
     count = 0
 
-    async def evaluate(rec, cfg, provider):
+    async def evaluate(rec, cfg, provider, *, precedents):
+        assert precedents == []
         nonlocal count
         i = count
         count += 1
@@ -266,7 +267,8 @@ def test_api_voting_fields_round_trip_and_run_override(tmp_path, monkeypatch, vo
     app.state.db.save_dataset("TEST", "fake", [RECORD])
     count = 0
 
-    async def evaluate(*args):
+    async def evaluate(*args, precedents):
+        assert precedents == []
         nonlocal count
         count += 1
         return full_result("Нет" if count == 1 else "Да")

@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from ..checklist import NA, allowed_answers, fmt_value, steps_desc
 
-PROMPT_VERSION = "p1"
+PROMPT_VERSION = "p2"
 
 ROLE = ("Ты — старший специалист отдела контроля качества контакт-центра брокерской компании: каждый день оцениваешь "
         "работу операторов по внутреннему чек-листу. Ты беспристрастен: судишь только по тому, что написано в транскрипте "

@@ -77,7 +77,8 @@ class DB:
                 "runs": {"mode": "TEXT DEFAULT 'full'"},
                 "run_items": {"previous_evaluation_id": "INTEGER"},
                 "evaluations": {"mode": "TEXT DEFAULT 'full'", "evaluated": "TEXT DEFAULT '[]'",
-                                "reused": "TEXT DEFAULT '[]'", "model_calls": "INTEGER DEFAULT 0"},
+                                "reused": "TEXT DEFAULT '[]'", "model_calls": "INTEGER DEFAULT 0",
+                                "precedents": "TEXT DEFAULT '[]'"},
             }
             for table, columns in additions.items():
                 existing = {r[1] for r in self.conn.execute(f"PRAGMA table_info({table})")}
@@ -273,14 +274,15 @@ class DB:
         return self.ex(
             "INSERT INTO evaluations(run_id, conversation_id, checklist_id, created_at, provider, model, prompt_version, "
             "status, error, latency_s, input_tokens, output_tokens, cost_usd, answers, pii_masked, raw, total, gross, "
-            "mode, evaluated, reused, model_calls) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            "mode, evaluated, reused, model_calls, precedents) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
             (ev.get("run_id"), ev["conversation_id"], ev["checklist_id"], ev.get("created_at") or now(), ev.get("provider"),
              ev.get("model"), ev.get("prompt_version"), ev.get("status"), ev.get("error"), ev.get("latency_s"),
              ev.get("input_tokens"), ev.get("output_tokens"), ev.get("cost_usd"),
              json.dumps(ev.get("answers") or {}, ensure_ascii=False),
              json.dumps(ev.get("pii_masked") or [], ensure_ascii=False), ev.get("raw"), ev.get("total"),
              None if ev.get("gross") is None else int(bool(ev.get("gross"))), ev.get("mode", "full"),
-             json.dumps(ev.get("evaluated", [])), json.dumps(ev.get("reused", [])), ev.get("model_calls", 0)))
+             json.dumps(ev.get("evaluated", [])), json.dumps(ev.get("reused", [])), ev.get("model_calls", 0),
+             json.dumps(ev.get("precedents") or [], ensure_ascii=False)))
 
     def evaluation(self, ev_id: int) -> dict | None:
         r = self.one("SELECT * FROM evaluations WHERE id=?", (ev_id,))
@@ -289,6 +291,7 @@ class DB:
             r["pii_masked"] = _json(r["pii_masked"], [])
             r["evaluated"] = _json(r["evaluated"], [])
             r["reused"] = _json(r["reused"], [])
+            r["precedents"] = _json(r["precedents"], [])
         return r
 
     def latest_success(self, cid: str, model: str) -> dict | None:
@@ -301,6 +304,7 @@ class DB:
         for r in rows:
             r["answers"] = _json(r["answers"], {})
             r["pii_masked"] = _json(r["pii_masked"], [])
+            r["precedents"] = _json(r["precedents"], [])
         return rows
 
     def latest_evaluations(self) -> dict[str, dict]:

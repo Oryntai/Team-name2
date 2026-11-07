@@ -4,7 +4,7 @@ from __future__ import annotations
 import asyncio
 import time
 
-from . import judge
+from . import judge, precedents
 from .incremental import partition
 
 
@@ -42,13 +42,14 @@ async def preview(db, config: dict, provider, conversation_ids=None, criteria=No
 
     async def one(cid, previous):
         record = db.record(cid)
+        examples = precedents.select(db, record, config)
         changed, _ = partition(config, model, previous, "incremental")
         only = criteria if criteria is not None else changed or all_ids
         # Полный вызов: критерий оценивается в контексте всего чек-листа (отдельный вызов хуже — замер 7.11);
         # показываем только проверяемые критерии. Один повтор при сбое — проверка интерактивная.
         for attempt in range(2):
             try:
-                result = await judge.evaluate(record, config, provider)
+                result = await judge.evaluate(record, config, provider, precedents=examples)
             except Exception as e:  # noqa: BLE001 — сбой одного диалога не роняет всю проверку
                 result = {"status": "error", "error": f"{type(e).__name__}: {e}", "answers": {}, "cost_usd": 0.0}
             if result["status"] == "ok" or attempt:

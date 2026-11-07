@@ -263,6 +263,7 @@ class Card extends CqaElement {
         <div class="cqa-hero-side">${delta}<div class="cqa-hero-caption">${esc(caption)}</div></div>
       </div>
       ${bars ? `<div class="cqa-sections" aria-label="Результаты секций">${bars}</div>` : ''}
+      ${this.s.ev.precedents?.length ? `<p class="cqa-hero-caption">Учтены похожие оценённые диалоги: ${this.s.ev.precedents.map((p) => `<a href="#/c/${encodeURIComponent(p.conversation_id)}">${esc(p.conversation_id)}</a>${p.source === 'reviewer' ? ' (решение проверяющего)' : ''}`).join(', ')}</p>` : ''}
     </div>`;
   }
 

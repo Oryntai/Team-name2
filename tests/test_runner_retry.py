@@ -20,6 +20,12 @@ class StubDB:
         return {"conversation_id": cid, "channel": "chat", "language": "RU",
                 "transcript": [{"timestamp": "00:01", "speaker": "operator", "text": "Здравствуйте"}]}
 
+    def q(self, sql, args=()):
+        return []  # в этой заглушке нет оценок для базы прецедентов
+
+    def conversation(self, cid):
+        return None  # эталонные диалоги не загружены
+
     def set_item(self, run_id, cid, status, ev_id=None, error=None):
         self.items.append((cid, status, error))
 
@@ -34,7 +40,8 @@ class StubDB:
 def run_one(monkeypatch, answers):
     calls = []
 
-    async def fake_evaluate(rec, config, provider):
+    async def fake_evaluate(rec, config, provider, *, precedents):
+        assert precedents == []
         calls.append(1)
         return answers[min(len(calls), len(answers)) - 1]
 

@@ -70,7 +70,7 @@ def merge_results(results: list[dict], config: dict) -> dict:
     }
 
 
-async def evaluate_voted(record, config, provider, n, sem=None, only=None) -> dict:
+async def evaluate_voted(record, config, provider, n, sem=None, only=None, precedents=None) -> dict:
     """Делает n параллельных оценок; каждый вызов отдельно занимает слот sem."""
     if type(n) is not int or n < 1:
         raise ValueError("Число голосов должно быть положительным целым.")
@@ -79,6 +79,8 @@ async def evaluate_voted(record, config, provider, n, sem=None, only=None) -> di
         started = time.monotonic()
         try:
             kwargs = {} if only is None else {"only": only}
+            if precedents is not None:
+                kwargs["precedents"] = precedents
             return await judge.evaluate(record, config, provider, **kwargs)
         except Exception as exc:  # noqa: BLE001 — сбой одного вызова не отменяет остальные
             return {"status": "error", "error": f"{type(exc).__name__}: {exc}", "answers": {},
