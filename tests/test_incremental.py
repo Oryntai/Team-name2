@@ -54,7 +54,7 @@ def setup(tmp_path, monkeypatch):
 
 def run(db, checklist_id=1, mode="incremental"):
     async def execute():
-        r = runner.Runner(db)
+        r = runner.Runner(db, votes=1)
         rid = r.start(["one"], checklist_id, "fake", mode)
         await r.wait()
         return rid
@@ -175,7 +175,7 @@ def test_failed_incremental_keeps_source_and_retry_limit(setup):
     p.failures = 4
 
     async def execute():
-        r = runner.Runner(db)
+        r = runner.Runner(db, votes=1)
         rid = r.start(["one"], cl, "fake", "incremental")
         await r.wait()
         return rid
@@ -227,7 +227,7 @@ def test_api_plan_diff_and_appeals_stay_on_original(tmp_path, monkeypatch):
     app = api.create_app(tmp_path / "api.db", web_dir=tmp_path, data_dir=tmp_path, allow_fake=True)
     app.state.db.save_dataset("TEST", "fake", [RECORD])
     with TestClient(app) as c:
-        body = {"dataset_id": "TEST", "checklist_id": 1, "provider": "fake"}
+        body = {"dataset_id": "TEST", "checklist_id": 1, "provider": "fake", "votes": 1}
 
         def execute(b):
             response = c.post("/api/runs", json=b)

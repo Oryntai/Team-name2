@@ -20,7 +20,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from starlette.background import BackgroundTask
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
@@ -58,6 +58,7 @@ class RunIn(BaseModel):
     checklist_id: int | None = None  # не задан → самая новая версия чек-листа
     provider: str | None = None
     mode: Literal["full", "incremental"] = "incremental"
+    votes: int | None = Field(default=None, ge=1, le=5, strict=True)
 
 
 class ChecklistIn(BaseModel):
@@ -256,7 +257,9 @@ def create_app(db_path: str | os.PathLike | None = None, *, web_dir: str | os.Pa
                 "weight": c.get("weight"), "na": bool(c.get("na")), "allowed": allowed_answers(c),
                 "reused_from": (o or {}).get("reused_from"), "fingerprint": (o or {}).get("fingerprint"),
                 "original": ({"answer": o.get("answer"), "explanation": o.get("explanation", ""),
-                              "evidence": o.get("evidence") or []} if isinstance(o, dict) else None),
+                              "evidence": o.get("evidence") or [],
+                              **{k: o[k] for k in ("votes", "agreement") if k in o}}
+                             if isinstance(o, dict) else None),
                 "final_answer": fin.get(c["id"]) if fin else (o or {}).get("answer"),
                 "appeal": appeal_short(hist[-1]) if hist else None,
                 "appeals": [appeal_short(a) for a in hist],
@@ -405,7 +408,8 @@ def create_app(db_path: str | os.PathLike | None = None, *, web_dir: str | os.Pa
                 "duration": c["duration"], "audio_src": f"/api/audio/{cid}" if has_audio else None,
                 "audio_recorded_s": round(audio.recorded_seconds(tr), 1) if has_audio else None,
                 "call_metrics": callmetrics.metrics(c),
-                "transcript": items, "evaluations": [summary(e) for e in db.evaluations_for(cid)]}
+                "transcript": items,
+                "evaluations": [{**summary(e), "answers": e["answers"]} for e in db.evaluations_for(cid)]}
 
     @app.get("/api/evaluations/{ev_id}")
     async def evaluation(ev_id: int):
@@ -443,13 +447,15 @@ def create_app(db_path: str | os.PathLike | None = None, *, web_dir: str | os.Pa
     @app.post("/api/runs/plan")
     async def run_plan(body: RunIn):
         ids, pid = run_input(body)
-        return plan(db, ids, body.checklist_id, judge.model_name(pid), body.mode)
+        out = plan(db, ids, body.checklist_id, judge.model_name(pid), body.mode)
+        out["model_calls"] *= runner.votes if body.votes is None else body.votes
+        return out
 
     @app.post("/api/runs")
     async def start_run(body: RunIn):
         ids, pid = run_input(body)
         try:
-            run_id = runner.start(ids, body.checklist_id, pid, body.mode)
+            run_id = runner.start(ids, body.checklist_id, pid, body.mode, votes=body.votes)
         except judge.ProviderError as e:
             _fail(422, str(e))
         return {"run_id": run_id}

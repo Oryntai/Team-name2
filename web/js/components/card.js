@@ -338,6 +338,9 @@ class Card extends CqaElement {
     const defTitle = def ? [`Да — ${def.yes}`, def.no ? `Нет — ${def.no}` : '', def.na ? `N/A — ${def.na_when}` : ''].filter(Boolean).join('\n') : '';
     const ev = orig.evidence || [];
     const evHtml = ev.length ? `<div class="cqa-crit-ev"><span class="cqa-ev-label">${esc(evidenceLabel(crit, orig.answer))}</span>${this.chipsHtml(ev)}</div>` : '';
+    const agreement = /^(\d+)\/(\d+)$/.exec(orig.agreement || '');
+    const uncertain = agreement && Number(agreement[1]) < Number(agreement[2]);
+    const votesTitle = (orig.votes || []).map((a, i) => `Прогон ${i + 1}: ${a}`).join('\n');
     return `<article class="cqa-crit ${this.s.active === c.id ? 'is-active' : ''}" data-tone="${tone}" data-crit="${esc(c.id)}">
       <div class="cqa-crit-head">
         <span class="cqa-crit-id">${esc(c.id)}</span>
@@ -347,6 +350,7 @@ class Card extends CqaElement {
       </div>
       ${step}
       ${c.reused_from != null ? `<p class="cqa-faint">Перенесено из оценки №${esc(c.reused_from)}: определение не менялось.</p>` : ''}
+      ${uncertain ? `<p class="cqa-muted" title="${esc(votesTitle)}">${icon('info')} модель не уверена: ${esc(agreement[1])} из ${esc(agreement[2])}</p>` : ''}
       ${orig.explanation ? `<p class="cqa-crit-expl">${linkifyRefs(orig.explanation, n)}</p>` : ''}
       ${evHtml}
       ${this.appealHtml(c, crit)}

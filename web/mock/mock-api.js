@@ -110,11 +110,18 @@ export async function createMockApi() {
   const label = (c) => `${c.name} · v${c.version}`;
   // Начальные выдуманные оценки считаем полными, чтобы на них можно было показать перенос.
   for (const e of st.evals) {
-    e.mode = 'full'; e.evaluated = e.criteria.map((c) => c.id); e.reused = []; e.model_calls = 1;
+    e.mode = 'full'; e.evaluated = e.criteria.map((c) => c.id); e.reused = []; e.model_calls = 3;
     for (const c of e.criteria) {
       const cfg = cfgOf(e.checklist.id);
       c.fingerprint = await fingerprint(cfg.criteria.find((x) => x.id === c.id), cfg, e.model);
       c.reused_from = null;
+      c.original.votes = [c.original.answer, c.original.answer, c.original.answer];
+      c.original.agreement = '3/3';
+    }
+    const uncertain = e.criteria.find((c) => c.type === 'bool' && ['Да', 'Нет'].includes(c.original.answer));
+    if (uncertain) {
+      uncertain.original.votes[2] = uncertain.original.answer === 'Да' ? 'Нет' : 'Да';
+      uncertain.original.agreement = '2/3';
     }
   }
 
