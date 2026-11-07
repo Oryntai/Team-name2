@@ -46,12 +46,12 @@
 
 /* ---------- основа ---------- */
 .cqa-body { margin: 0; background: var(--cqa-bg); }
-cqa-app, cqa-conversation-list, cqa-card, cqa-appeals, cqa-checklist-editor, cqa-journal { display: block; }
-.cqa-scope, cqa-app, cqa-conversation-list, cqa-card, cqa-appeals, cqa-checklist-editor, cqa-journal {
+cqa-app, cqa-conversation-list, cqa-card, cqa-appeals, cqa-analytics, cqa-checklist-editor, cqa-journal { display: block; }
+.cqa-scope, cqa-app, cqa-conversation-list, cqa-card, cqa-appeals, cqa-analytics, cqa-checklist-editor, cqa-journal {
   font-family: var(--cqa-font); font-size: 14px; line-height: 1.45; color: var(--cqa-text);
   -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility;
 }
-.cqa-scope *, cqa-app *, cqa-conversation-list *, cqa-card *, cqa-appeals *, cqa-checklist-editor *, cqa-journal * { box-sizing: border-box; }
+.cqa-scope *, cqa-app *, cqa-conversation-list *, cqa-card *, cqa-appeals *, cqa-analytics *, cqa-checklist-editor *, cqa-journal * { box-sizing: border-box; }
 .cqa-num { font-variant-numeric: tabular-nums; }
 .cqa-mono { font-family: var(--cqa-mono); font-size: .92em; }
 .cqa-muted { color: var(--cqa-muted); }
@@ -770,3 +770,37 @@ cqa-card { container-type: inline-size; container-name: cqa-card; }
 @keyframes cqa-pop-in { from { opacity: 0; transform: scale(.97) translateY(-4px); } }
 @keyframes cqa-pop-out { to { opacity: 0; transform: scale(.97) translateY(-4px); } }
 @media (prefers-reduced-motion: reduce) { .cqa-pop, .cqa-pop.is-closing { animation: none; } }
+/* Аналитика: строки и раскрывающиеся подробности, без карточек и библиотек. */
+cqa-analytics { display: block; }
+.cqa-analytics-summary { display: flex; gap: 6px 20px; flex-wrap: wrap; margin: 8px 0 16px; }
+.cqa-analytics-summary > span { white-space: nowrap; }
+.cqa-analytics-section { margin: 20px 0; }
+.cqa-analytics-section h2 { margin: 0 0 10px; font-size: 15px; color: var(--cqa-green-950); }
+.cqa-analytics-section h2 .cqa-muted { font-size: 12.5px; font-weight: 400; }
+.cqa-analytics-toggle, .cqa-analytics-criterion { font: inherit; border: 0; background: none; color: inherit; cursor: pointer; text-align: left; display: flex; align-items: center; gap: 10px; }
+.cqa-analytics-toggle { width: 100%; padding: 6px 0; flex-wrap: wrap; }
+.cqa-analytics-toggle > .cqa-icon { margin-left: auto; }
+.cqa-analytics-criterion { padding: 0; }
+.cqa-analytics-toggle:hover, .cqa-analytics-criterion:hover { color: var(--cqa-green-600); }
+.cqa-analytics-toggle:focus-visible, .cqa-analytics-criterion:focus-visible { outline: 2px solid var(--cqa-green-600); outline-offset: 3px; }
+.cqa-analytics-criterion > .cqa-icon { flex: none; width: 14px; }
+.cqa-analytics-toggle .cqa-icon, .cqa-analytics-criterion .cqa-icon { transition: transform .144s ease-in; }
+.cqa-analytics-toggle[aria-expanded="true"] .cqa-icon, .cqa-analytics-criterion[aria-expanded="true"] .cqa-icon { transform: rotate(180deg); transition: transform .18s ease-out; }
+.cqa-analytics-fold { display: grid; grid-template-rows: 0fr; opacity: 0; visibility: hidden; transition: grid-template-rows .144s ease-in, opacity .144s ease-in, visibility 0s .144s; }
+.cqa-analytics-fold.is-open { grid-template-rows: 1fr; opacity: 1; visibility: visible; transition: grid-template-rows .18s cubic-bezier(.16,1,.3,1), opacity .18s ease-out, visibility 0s; }
+.cqa-analytics-fold > div { min-height: 0; overflow: hidden; }
+.cqa-analytics-content { padding: 8px 0; font-size: 13px; }
+.cqa-analytics-content p { margin: 4px 0 10px; max-width: 950px; }
+cqa-analytics .cqa-table .cqa-analytics-detail-row > td { padding: 0 12px; border-bottom: 0; }
+.cqa-analytics-links { display: flex; gap: 10px 24px; flex-wrap: wrap; padding: 8px 0; }
+.cqa-analytics-links > span { display: inline-flex; align-items: baseline; gap: 6px; }
+.cqa-analytics-chart { display: block; width: 100%; max-width: 800px; min-width: 340px; height: auto; overflow: visible; }
+.cqa-analytics-chart rect { fill: var(--cqa-green-600); }
+.cqa-analytics-chart text { fill: var(--cqa-muted); font-size: 12px; }
+@media (max-width: 480px) {
+  .cqa-analytics-chart { min-width: 0; }
+  .cqa-analytics-section h2 .cqa-muted { font-size: 11px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .cqa-analytics-fold, .cqa-analytics-fold.is-open, .cqa-analytics-toggle .cqa-icon, .cqa-analytics-criterion .cqa-icon { transition: none; }
+}

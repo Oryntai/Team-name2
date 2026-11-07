@@ -7,12 +7,14 @@ import './dropdown.js';
 import './components/conversation-list.js';
 import './components/card.js';
 import './components/appeals.js';
+import './components/analytics.js';
 import './components/checklist-editor.js';
 import './components/journal.js';
 
 const NAV = [
   { key: 'list', href: '#/', label: 'Диалоги', icon: 'chat' },
   { key: 'appeals', href: '#/appeals', label: 'Апелляции', icon: 'gavel' },
+  { key: 'analytics', href: '#/analytics', label: 'Аналитика', icon: 'scale' },
   { key: 'checklist', href: '#/checklist', label: 'Чек-лист', icon: 'checklist' },
   { key: 'journal', href: '#/journal', label: 'Журнал', icon: 'journal' },
 ];
@@ -92,6 +94,11 @@ class CqaApp extends CqaElement {
       el = document.createElement('cqa-appeals');
       if (params.get('id')) el.setAttribute('appeal-id', params.get('id'));
       nav = 'appeals';
+    } else if (head === 'analytics') {
+      el = document.createElement('cqa-analytics');
+      if (params.get('dataset_id')) el.setAttribute('dataset-id', params.get('dataset_id'));
+      if (params.get('checklist_id')) el.setAttribute('checklist-id', params.get('checklist_id'));
+      nav = 'analytics';
     } else if (head === 'checklist') {
       el = document.createElement('cqa-checklist-editor');
       if (params.get('id')) el.setAttribute('checklist-id', params.get('id'));
@@ -110,7 +117,7 @@ class CqaApp extends CqaElement {
     const main = this.part('main');
     main.replaceChildren(el);
     window.scrollTo(0, 0);
-    document.title = `${{ list: 'Диалоги', appeals: 'Апелляции', checklist: 'Чек-лист', journal: 'Журнал' }[nav]}${head === 'c' && id ? ` · ${id}` : ''} — CQA`;
+    document.title = `${{ list: 'Диалоги', appeals: 'Апелляции', analytics: 'Аналитика', checklist: 'Чек-лист', journal: 'Журнал' }[nav]}${head === 'c' && id ? ` · ${id}` : ''} — CQA`;
   }
 }
 

@@ -24,7 +24,7 @@ from pydantic import BaseModel, Field
 from starlette.background import BackgroundTask
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from . import assist, audio, callmetrics, judge, pii, sandbox, sources
+from . import analytics, assist, audio, callmetrics, judge, pii, sandbox, sources
 from .checklist import allowed_answers, normalize, validate
 from .db import DB
 from .judge.providers import env as read_env
@@ -346,6 +346,23 @@ def create_app(db_path: str | os.PathLike | None = None, *, web_dir: str | os.Pa
     @app.get("/api/datasets")
     async def datasets():
         return db.list_datasets()
+
+    def analytics_report(dataset_id, checklist_id):
+        try:
+            return analytics.report(db, dataset_id, checklist_id)
+        except ValueError as exc:
+            _fail(422, str(exc))
+
+    @app.get("/api/analytics")
+    def get_analytics(dataset_id: str | None = None, checklist_id: int | None = None):
+        data = analytics_report(dataset_id, checklist_id)
+        return {key: value for key, value in data.items() if key != "dialogues"}
+
+    @app.get("/api/analytics/export.csv")
+    def export_analytics(dataset_id: str | None = None, checklist_id: int | None = None):
+        data = analytics_report(dataset_id, checklist_id)
+        return StreamingResponse(iter([analytics.export_csv(data)]), media_type="text/csv; charset=utf-8",
+                                 headers={"Content-Disposition": 'attachment; filename="cqa-analytics.csv"'})
 
     @app.post("/api/datasets/import")
     async def import_dataset(body: ImportIn):

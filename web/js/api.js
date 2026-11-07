@@ -56,6 +56,8 @@ function httpClient(base) {
     settings: () => req('GET', '/settings'),
     saveSettings: (body) => req('PUT', '/settings', body),
     datasets: () => req('GET', '/datasets'),
+    analytics: (params) => req('GET', `/analytics${q(params)}`),
+    analyticsExportUrl: (params) => `${root}/analytics/export.csv${q(params)}`,
     importDataset: (body) => req('POST', '/datasets/import', body),
     uploadDataset: (file) => { const fd = new FormData(); fd.append('file', file); return req('POST', '/datasets/upload', fd, true); },
     conversations: (params) => req('GET', `/conversations${q(params)}`),
