@@ -2,6 +2,7 @@
 // Повторяет контракт docs/ARCHITECTURE.md. Модель не вызывается: «оценка» в демо-прогоне копирует ответы из
 // готовых демо-оценок — это только для проверки интерфейса. Перенос повторяет правила продукта.
 import { callMetrics } from './callmetrics.js';
+import { APPEAL_REASONS } from '../js/appeal-reasons.js';
 
 const BASE = new URL('./', import.meta.url);
 const clone = (x) => (x == null ? x : JSON.parse(JSON.stringify(x)));
@@ -135,7 +136,7 @@ export async function createMockApi() {
     const orig = {}, fin = {};
     for (const c of e.criteria) {
       const a = st.appeals.filter((x) => +x.evaluation_id === +e.id && x.criterion_id === c.id).sort((x, y) => y.id - x.id)[0];
-      c.appeal = a ? { id: a.id, comment: a.comment, status: a.status, new_answer: a.new_answer, reason: a.reason, created_at: a.created_at, decided_at: a.decided_at } : null;
+      c.appeal = a ? { id: a.id, comment: a.comment, reason_code: a.reason_code || 'other', status: a.status, new_answer: a.new_answer, reason: a.reason, created_at: a.created_at, decided_at: a.decided_at } : null;
       orig[c.id] = c.original.answer;
       fin[c.id] = a?.status === 'changed' ? a.new_answer : c.original.answer;
       c.final_answer = fin[c.id];
@@ -437,17 +438,21 @@ export async function createMockApi() {
         const se = serveEval(ev);
         const c = se.criteria.find((x) => x.id === a.criterion_id);
         const conv = st.convs.find((x) => x.id === ev.conversation_id);
-        return { ...clone(a), conversation_id: ev.conversation_id, criterion_title: c?.title, original_answer: c?.original.answer,
+        return { ...clone(a), reason_code: a.reason_code || 'other', conversation_id: ev.conversation_id,
+          criterion_type: c?.type, allowed: c?.allowed, criterion_title: c?.title, original_answer: c?.original.answer,
           explanation: c?.original.explanation, evidence: c?.original.evidence || [],
           evidence_replies: (c?.original.evidence || []).map((k) => conv.transcript.find((m) => m.n === k)).filter(Boolean).map((m) => ({ n: m.n, timestamp: m.timestamp, speaker: m.speaker, text: m.text })),
-          total_original: se.original.total, total_final: se.final.total };
+          total_original: se.original.total, total_final: se.final.total,
+          total_before_decision: a.total_before_decision ?? se.original.total,
+          total_after_decision: a.total_after_decision ?? se.final.total };
       });
     },
-    async createAppeal({ evaluation_id, criterion_id, comment }) {
+    async createAppeal({ evaluation_id, criterion_id, comment, reason_code = 'other' }) {
       await wait(200);
+      if (!Object.hasOwn(APPEAL_REASONS, reason_code)) throw new MockError(422, 'Недопустимая причина');
       if (!String(comment || '').trim()) throw new MockError(422, 'Добавьте комментарий');
       if (st.appeals.some((a) => +a.evaluation_id === +evaluation_id && a.criterion_id === criterion_id && a.status === 'open')) throw new MockError(409, 'По этому критерию уже есть открытая апелляция');
-      const a = { id: nextId(st.appeals), evaluation_id: +evaluation_id, criterion_id, comment, created_at: now(), status: 'open', new_answer: null, reason: null, decided_at: null };
+      const a = { id: nextId(st.appeals), evaluation_id: +evaluation_id, criterion_id, comment, reason_code, created_at: now(), status: 'open', new_answer: null, reason: null, decided_at: null };
       st.appeals.push(a);
       return clone(a);
     },
@@ -458,6 +463,7 @@ export async function createMockApi() {
       if (a.status !== 'open') throw new MockError(409, 'Решение уже принято');
       if (!String(reason || '').trim()) throw new MockError(422, 'Укажите причину решения');
       const ev = st.evals.find((e) => +e.id === +a.evaluation_id);
+      a.total_before_decision = serveEval(ev).final.total;
       const c = ev.criteria.find((x) => x.id === a.criterion_id);
       if (decision === 'change') {
         if (!c.allowed.includes(new_answer)) throw new MockError(422, `Недопустимый ответ «${new_answer}»`);
@@ -465,6 +471,7 @@ export async function createMockApi() {
         Object.assign(a, { status: 'changed', new_answer });
       } else Object.assign(a, { status: 'confirmed', new_answer: null });
       Object.assign(a, { reason, decided_at: now() });
+      a.total_after_decision = serveEval(ev).final.total;
       return { appeal: clone(a), evaluation: serveEval(ev) };
     },
   };

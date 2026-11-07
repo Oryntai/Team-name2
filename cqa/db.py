@@ -46,7 +46,7 @@ CREATE TABLE IF NOT EXISTS insights(
 CREATE INDEX IF NOT EXISTS insights_conv ON insights(conversation_id, id);
 CREATE TABLE IF NOT EXISTS appeals(
   id INTEGER PRIMARY KEY AUTOINCREMENT, evaluation_id INTEGER, criterion_id TEXT, comment TEXT, created_at TEXT,
-  status TEXT, new_answer TEXT, reason TEXT, decided_at TEXT);
+  status TEXT, new_answer TEXT, reason TEXT, decided_at TEXT, reason_code TEXT NOT NULL DEFAULT 'other');
 CREATE INDEX IF NOT EXISTS appeals_eval ON appeals(evaluation_id);
 CREATE TABLE IF NOT EXISTS translations(
   conversation_id TEXT, lang TEXT, created_at TEXT, model TEXT, cost_usd REAL, data TEXT NOT NULL,
@@ -106,6 +106,7 @@ class DB:
             self.conn.execute("PRAGMA journal_mode=WAL")
             self.conn.executescript(SCHEMA)
             additions = {
+                "appeals": {"reason_code": "TEXT NOT NULL DEFAULT 'other'"},
                 "runs": {"mode": "TEXT DEFAULT 'full'"},
                 "run_items": {"previous_evaluation_id": "INTEGER"},
                 "evaluations": {"mode": "TEXT DEFAULT 'full'", "evaluated": "TEXT DEFAULT '[]'",
@@ -478,9 +479,9 @@ class DB:
         return rows
 
     # --- апелляции ---
-    def create_appeal(self, evaluation_id: int, criterion_id: str, comment: str) -> int:
-        return self.ex("INSERT INTO appeals(evaluation_id, criterion_id, comment, created_at, status) VALUES(?,?,?,?, 'open')",
-                       (evaluation_id, criterion_id, comment, now()))
+    def create_appeal(self, evaluation_id: int, criterion_id: str, comment: str, reason_code: str = "other") -> int:
+        return self.ex("INSERT INTO appeals(evaluation_id, criterion_id, comment, created_at, reason_code, status) "
+                       "VALUES(?,?,?,?,?, 'open')", (evaluation_id, criterion_id, comment, now(), reason_code))
 
     def appeal(self, appeal_id: int) -> dict | None:
         return self.one("SELECT * FROM appeals WHERE id=?", (appeal_id,))

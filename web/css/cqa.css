@@ -838,7 +838,7 @@ cqa-ask { display: block; max-width: 1000px; }
 .cqa-pop--left { align-self: flex-start; transform-origin: top left; }
 .cqa-pop--center { align-self: center; transform-origin: top center; }
 .cqa-pop--block { width: 100%; margin-top: 10px; transform-origin: top center; }
-.cqa-pop.is-closing { animation: cqa-pop-out .12s ease-in forwards; }
+.cqa-pop.is-closing { animation: cqa-pop-out .144s ease-in forwards; }
 @keyframes cqa-pop-in { from { opacity: 0; transform: scale(.97) translateY(-4px); } }
 @keyframes cqa-pop-out { to { opacity: 0; transform: scale(.97) translateY(-4px); } }
 @media (prefers-reduced-motion: reduce) { .cqa-pop, .cqa-pop.is-closing { animation: none; } }
@@ -899,4 +899,47 @@ cqa-analytics .cqa-table .cqa-analytics-detail-row > td { padding: 0 12px; borde
 }
 @media (prefers-reduced-motion: reduce) {
   .cqa-analytics-fold, .cqa-analytics-fold.is-open, .cqa-analytics-toggle .cqa-icon, .cqa-analytics-criterion .cqa-icon { transition: none; }
+}
+
+/* Апелляции: одна строка в очереди, решение и доказательства справа. */
+.cqa-appeals-grid { grid-template-columns: minmax(0, 1.35fr) minmax(340px, 1fr); gap: 28px; }
+.cqa-appeal-queue { min-width: 0; overflow: auto; }
+.cqa-appeal-list { padding: 0; gap: 0; min-width: 620px; }
+.cqa-appeal-columns, .cqa-appeal-item { display: grid; grid-template-columns: minmax(94px, 1fr) minmax(110px, 1.4fr) 52px minmax(110px, 1.15fr) 104px 90px; gap: 10px; align-items: center; }
+.cqa-appeal-columns { min-width: 620px; padding: 10px 8px; color: var(--cqa-muted); font-size: 11px; }
+.cqa-appeal-item { padding: 12px 8px; border: 0; border-radius: 0; font-size: 12px; }
+.cqa-appeal-item > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cqa-appeal-item .cqa-badge { font-size: 11px; padding: 3px 5px; }
+.cqa-appeal-item[aria-pressed="true"] { background: var(--cqa-mint-50); }
+.cqa-appeal-detail { min-width: 0; }
+cqa-appeals .cqa-detail { padding: 8px 0; animation: cqa-pop-in .18s ease-out; }
+cqa-appeals .cqa-detail-head h2 { font-size: 17px; }
+cqa-appeals .cqa-quote, cqa-appeals .cqa-decision, cqa-appeals .cqa-fragment,
+cqa-appeals .cqa-note, cqa-appeals .cqa-result-banner { border: 0; box-shadow: none; border-radius: 0; background: white; padding: 0; }
+cqa-appeals .cqa-fragment { max-height: 240px; }
+cqa-appeals .cqa-crit-expl { font-size: 13px; }
+.cqa-decision-options { display: flex; flex-wrap: wrap; gap: 20px; }
+.cqa-appeal-form { border: 0; animation: cqa-pop-in .18s ease-out; }
+cqa-card .cqa-pop { border: 0; box-shadow: none; }
+.cqa-appeal-reasons { flex-wrap: wrap; border: 0; background: white; padding: 0; }
+.cqa-appeal-reasons button { padding: 6px 8px; font-size: 12px; }
+.cqa-score-link { font-size: 12px; }
+.cqa-score-dialog { width: min(720px, calc(100vw - 24px)); background: white; border: 0; box-shadow: none; }
+.cqa-score-dialog[open] { animation: cqa-pop-in .18s ease-out; }
+.cqa-score-dialog.is-closing { animation: cqa-pop-out .144s ease-in forwards; }
+.cqa-score-dialog .cqa-dialog-body { max-height: 75vh; overflow: auto; gap: 12px; font-size: 13px; }
+.cqa-score-dialog p { margin: 0; }
+.cqa-score-table { overflow-x: auto; }
+.cqa-score-table .cqa-table th, .cqa-score-table .cqa-table td { border: 0; background: white; padding: 8px 6px; }
+.cqa-score-table .cqa-table th { white-space: nowrap; }
+.cqa-score-table .cqa-table td:not(:first-child) { text-align: right; font-variant-numeric: tabular-nums; }
+.cqa-score-sections { display: grid; gap: 8px; padding-top: 12px; }
+.cqa-score-sections .cqa-row { justify-content: space-between; }
+@media (max-width: 1100px) {
+  .cqa-appeals-grid { grid-template-columns: minmax(0, 1fr); gap: 20px; }
+  .cqa-appeals-grid > aside { position: static; }
+  .cqa-appeal-list { max-height: 260px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  cqa-appeals .cqa-detail, .cqa-appeal-form, .cqa-score-dialog[open], .cqa-score-dialog.is-closing { animation: none; }
 }

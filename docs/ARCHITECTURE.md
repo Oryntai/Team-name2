@@ -164,7 +164,7 @@ evaluations(id PK, run_id, conversation_id, checklist_id, created_at, provider, 
             mode, evaluated JSON, reused JSON, model_calls)
 run_items(run_id, pos, conversation_id, status, evaluation_id, error, previous_evaluation_id)
 insights(id PK, conversation_id, evaluation_id, created_at, provider, model, cost_usd, input_tokens, output_tokens, data JSON)
-appeals(id PK, evaluation_id, criterion_id, comment, created_at, status open|confirmed|changed,
+appeals(id PK, evaluation_id, criterion_id, comment, reason_code, created_at, status open|confirmed|changed,
         new_answer, reason, decided_at)
 translations(conversation_id, lang, created_at, model, cost_usd, data JSON, PK(conversation_id, lang))
 translation_calls(id PK, conversation_id, lang, created_at, model, cost_usd, status, error)
@@ -220,9 +220,17 @@ calibrations(id PK, conversation_id, evaluation_id, checklist_id, reviewer, crea
 | `POST /api/checklists/check-approved` | `{"config", "criteria"?: [...], "limit"?: 12, "provider"?}` | `{"provider","model","checklist_id","criteria","conversation_ids","model_calls","message","cost_usd","latency_s"}`; ответы не сохраняются в оценки |
 | `GET /api/checklist-checks/calls` | — | журнал отдельных вызовов сверки: диалог, критерии, модель, статус, ошибка, токены, стоимость, время |
 | `GET /api/appeals` | `?status=open\|decided\|all` | `[{"id","evaluation_id","conversation_id","criterion_id","criterion_title","original_answer","explanation","evidence","evidence_replies": [{"n","timestamp","speaker","text"}],"comment","status","new_answer","reason","created_at","decided_at","total_original","total_final"}]` |
-| `POST /api/appeals` | `{"evaluation_id","criterion_id","comment"}` | `201` апелляция; `409`, если по критерию уже есть открытая |
+| `POST /api/appeals` | `{"evaluation_id","criterion_id","comment","reason_code"?}` | `201` апелляция; `409`, если по критерию уже есть открытая |
 | `POST /api/appeals/{id}/decision` | `{"decision": "confirm"\|"change", "new_answer"?, "reason"}` | `{"appeal", "evaluation"}` (оценка уже с новым итогом) |
 | `GET /api/audio/{conversation_id}` | заголовок `Range` | `audio/mpeg` (206 при Range) |
+
+`reason_code` апелляции: `wrong_interpretation`, `wrong_evidence`, `wrong_na`, `other` (по умолчанию).
+Неизвестный код — `422`. На старой базе колонка добавляется через `PRAGMA table_info` и `ALTER TABLE`,
+старые апелляции получают `other`. Код возвращается в очереди и истории апелляций карточки.
+`total_before_decision` / `total_after_decision` в апелляции — итоги непосредственно до и после её решения
+по порядку `decided_at, id`; более поздние решения в эту пару не входят. У открытой оба поля показывают
+текущий итог. Исходные ответы и `evaluations` не меняются. В карточке «Как посчитан итог» выводит
+`score_final` критериев и секции/итог `final` из API, без повторного расчёта в браузере.
 
 Перевод — один вызов Haiku 5.5 через существующий провайдер, независимо от модели оценки в настройках.
 Перед отправкой применяется `pii.mask_transcript`; строгий ответ — массив `{turn, text}` для всех реплик

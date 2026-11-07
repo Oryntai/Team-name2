@@ -1,6 +1,7 @@
 // <cqa-card conversation-id="…" [evaluation-id="…"] [embedded]> — карточка диалога: транскрипт + результат оценки,
 // переход от обоснования к реплике (и к секунде записи звонка), апелляция оператора.
 import { CqaElement } from '../base.js';
+import { APPEAL_REASONS, appealReasonLabel } from '../appeal-reasons.js';
 import { INSIGHT_FLAGS, SENTIMENT, insightBusy } from '../insights.js';
 import {
   esc, icon, fmtScore, fmtPts, fmtDateTime, fmtMoney, fmtSeconds, fmtInt, fmtTs, fmtClock, answerTone, answerLabel,
@@ -524,12 +525,58 @@ class Card extends CqaElement {
     return `<div class="cqa-panel cqa-hero">
       <div class="cqa-eyebrow">Итоговый балл</div>
       <div class="cqa-hero-top">
-        <div class="cqa-hero-score"><span class="cqa-hero-num" data-tone="${scoreTone(fin.total)}">${fmtScore(fin.total)}</span><span class="cqa-hero-of">/ 100</span></div>
+        <div><div class="cqa-hero-score"><span class="cqa-hero-num" data-tone="${scoreTone(fin.total)}">${fmtScore(fin.total)}</span><span class="cqa-hero-of">/ 100</span></div>
+          <button type="button" class="cqa-link cqa-score-link" data-act="score-open" aria-haspopup="dialog">Как посчитан итог</button></div>
         <div class="cqa-hero-side">${delta}<div class="cqa-hero-caption">${esc(caption)}</div></div>
       </div>
       ${bars ? `<div class="cqa-sections" aria-label="Результаты секций">${bars}</div>` : ''}
       ${this.s.ev.precedents?.length ? `<p class="cqa-hero-caption">Учтены похожие оценённые диалоги: ${this.s.ev.precedents.map((p) => `<a href="#/c/${encodeURIComponent(p.conversation_id)}">${esc(p.conversation_id)}</a>${p.source === 'reviewer' ? ' (решение проверяющего)' : ''}`).join(', ')}</p>` : ''}
     </div>`;
+  }
+
+  scoreDialogHtml() {
+    const ev = this.s.ev;
+    const fin = ev.final || ev.original || {};
+    return `<div class="cqa-dialog-head"><h2 id="cqa-score-title">Как посчитан итог</h2>
+        <button type="button" class="cqa-pop-x" data-act="score-close" aria-label="Закрыть">${icon('x')}</button></div>
+      <div class="cqa-dialog-body">
+        <div class="cqa-score-table"><table class="cqa-table"><thead><tr><th>Критерий</th><th>Ответ</th><th>Вес, %</th><th>После N/A, %</th><th>Баллы</th></tr></thead>
+          <tbody>${(ev.criteria || []).map((c) => {
+            const sc = c.score_final || c.score_original || {};
+            const counted = c.type !== 'flag' && sc.applicable;
+            return `<tr><td>${esc(c.id)} · ${esc(c.title)}</td><td>${esc(c.final_answer ?? c.original?.answer ?? '—')}</td>
+              <td>${fmtPts(c.weight)}</td><td>${counted ? fmtPts(sc.weight_eff) : '—'}</td>
+              <td>${c.type === 'flag' ? 'без баллов' : counted ? fmtPts(sc.points_eff) : 'исключён'}</td></tr>`;
+          }).join('')}</tbody></table></div>
+        <p class="cqa-muted">N/A исключены, веса применимых пересчитаны до 100</p>
+        <div class="cqa-score-formula">${fin.total == null ? 'Итог не рассчитывается: нет применимых критериев с весом' : `итог = сумма баллов / сумма весов применимых × 100 = <b>${fmtScore(fin.total)}</b>`}</div>
+        <details><summary class="cqa-link">По секциям</summary><div class="cqa-score-sections">${(fin.sections || []).map((s) => `<div class="cqa-row"><span>${esc(s.name)}</span><span class="cqa-num">${fmtPts(s.points_eff)} / ${fmtPts(s.max_eff)} · ${s.percent == null ? 'N/A' : `${fmtScore(s.percent)}%`}</span></div>`).join('')}</div></details>
+      </div>`;
+  }
+
+  openScoreDialog() {
+    let d = this.part('score-dialog');
+    if (!d) {
+      d = document.createElement('dialog');
+      d.className = 'cqa-dialog cqa-score-dialog';
+      d.dataset.part = 'score-dialog';
+      d.setAttribute('aria-labelledby', 'cqa-score-title');
+      d.addEventListener('cancel', (e) => { e.preventDefault(); this.closeScoreDialog(); });
+      d.addEventListener('click', (e) => { if (e.target === d) this.closeScoreDialog(); });
+      this.appendChild(d);
+    }
+    d.classList.remove('is-closing');
+    d.innerHTML = this.scoreDialogHtml();
+    if (!d.open) d.showModal();
+  }
+
+  closeScoreDialog() {
+    const d = this.part('score-dialog');
+    if (!d?.open || d.classList.contains('is-closing')) return;
+    d.classList.add('is-closing');
+    const close = () => { d.close(); d.classList.remove('is-closing'); };
+    if (matchMedia('(prefers-reduced-motion: reduce)').matches) close();
+    else setTimeout(close, 144);
   }
 
   grossHtml(fin) {
@@ -670,7 +717,7 @@ class Card extends CqaElement {
     this.s.active = null;
     this.s.appealFor = null;
     const pop = this.querySelector('.cqa-pop:not(.is-closing)');
-    if (pop) { pop.classList.add('is-closing'); setTimeout(() => pop.remove(), 120); }
+    if (pop) { pop.classList.add('is-closing'); setTimeout(() => pop.remove(), matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 144); }
     this.querySelectorAll('.cqa-mark.is-on, .cqa-crit.is-active').forEach((el) => el.classList.remove('is-on', 'is-active'));
     this.highlight(null);
   }
@@ -720,7 +767,10 @@ class Card extends CqaElement {
     if (!a) {
       if (this.s.appealFor === c.id) {
         return `<form class="cqa-appeal cqa-appeal-form" data-form="appeal" data-crit="${esc(c.id)}">
-          <label class="cqa-field"><span class="cqa-label">Почему вы не согласны с оценкой «${esc(c.title)}»? <small>обязательно</small></span>
+          <div class="cqa-label">Причина апелляции</div>
+          <input type="hidden" name="reason_code" value="other">
+          <div class="cqa-segctl cqa-appeal-reasons" role="group" aria-label="Причина апелляции">${Object.entries(APPEAL_REASONS).map(([code, label]) => `<button type="button" data-appeal-reason="${code}" aria-pressed="${code === 'other'}">${label}</button>`).join('')}</div>
+          <label class="cqa-field"><span class="cqa-label">Комментарий</span>
             <textarea class="cqa-textarea" name="comment" required minlength="3" placeholder="Например: оператор представился во второй реплике — см. №12"></textarea></label>
           <div class="cqa-row"><button type="button" class="cqa-btn cqa-btn--sm" data-act="appeal-cancel">Отмена</button>
           <button type="submit" class="cqa-btn cqa-btn--primary cqa-btn--sm">${icon('gavel')}Подать апелляцию</button></div>
@@ -735,8 +785,8 @@ class Card extends CqaElement {
     if (a.status === 'open') {
       return `<div class="cqa-appeal"><div class="cqa-appeal-status">
         <span class="cqa-badge cqa-badge--warn">${icon('clock')}Апелляция на рассмотрении</span>
-        <div class="cqa-appeal-text">Комментарий оператора: <q>${esc(a.comment)}</q> <span class="cqa-faint">· ${esc(fmtDateTime(a.created_at))}</span></div>
-        ${role === 'reviewer' ? `<a class="cqa-btn cqa-btn--primary cqa-btn--xs" href="#/appeals?id=${encodeURIComponent(a.id)}">${icon('shield')}Рассмотреть</a>` : ''}
+        <div class="cqa-appeal-text">${esc(appealReasonLabel(a.reason_code))} · <q>${esc(a.comment)}</q> <span class="cqa-faint">· ${esc(fmtDateTime(a.created_at))}</span></div>
+        <a class="cqa-btn cqa-btn--primary cqa-btn--xs" href="#/appeals?id=${encodeURIComponent(a.id)}">${icon('arrow')}${role === 'reviewer' ? 'Рассмотреть' : 'К апелляции'}</a>
       </div></div>`;
     }
     const changed = a.status === 'changed';
@@ -745,7 +795,7 @@ class Card extends CqaElement {
       <div class="cqa-appeal-text">
         ${changed ? `<span class="cqa-final">Финальный ответ: <span class="cqa-answer cqa-answer--sm" data-tone="${answerTone(crit, fa)}">${esc(answerLabel(crit, fa))}</span></span> · ` : ''}
         Причина: <q>${esc(a.reason || '—')}</q><br>
-        <span class="cqa-faint">Апелляция: «${esc(a.comment)}» · решение ${esc(fmtDateTime(a.decided_at))}</span>
+        <span class="cqa-faint">${esc(appealReasonLabel(a.reason_code))}: «${esc(a.comment)}» · решение ${esc(fmtDateTime(a.decided_at))}</span>
       </div>
     </div></div>`;
   }
@@ -815,6 +865,13 @@ class Card extends CqaElement {
   /* ---------- события ---------- */
   onClick(e) {
     const t = e.target;
+    const reason = t.closest('[data-appeal-reason]');
+    if (reason) {
+      const form = reason.closest('form');
+      form.elements.reason_code.value = reason.dataset.appealReason;
+      form.querySelectorAll('[data-appeal-reason]').forEach((b) => b.setAttribute('aria-pressed', String(b === reason)));
+      return;
+    }
     const calSummary = t.closest('.cqa-calibration details > summary');
     if (calSummary) { e.preventDefault(); this.toggleCalibrationDetails(calSummary.parentElement); return; }
     if (this.s.pop && !t.closest('.cqa-pop, .cqa-mark, .cqa-crit, [data-part="translation-tools"]')) this.closePop();
@@ -859,6 +916,8 @@ class Card extends CqaElement {
       else if (a === 'cal-start') this.startCalibration();
       else if (a === 'cal-close') { if (!this.s.calBusy) { this.s.blind = false; this.s.comparison = null; this.render(); } }
       else if (a === 'pop-close') this.closePop();
+      else if (a === 'score-open') this.openScoreDialog();
+      else if (a === 'score-close') this.closeScoreDialog();
       else if (a === 'thinking-open' || a === 'thinking-tab') {
         if (a === 'thinking-tab') this.s.thinkingTab = +act.dataset.i; else this.s.thinkingTab = 0;
         let d = this.part('thinking-dialog');
@@ -910,12 +969,14 @@ class Card extends CqaElement {
     if (f.dataset.form === 'calibration') { e.preventDefault(); await this.submitCalibration(f); return; }
     if (f.dataset.form !== 'appeal') return;
     e.preventDefault();
-    const comment = String(new FormData(f).get('comment') || '').trim();
+    const fd = new FormData(f);
+    const comment = String(fd.get('comment') || '').trim();
+    const reason_code = fd.get('reason_code') || 'other';
     if (comment.length < 3) { toast('Напишите, с чем вы не согласны', 'warn'); return; }
     const btn = f.querySelector('[type=submit]');
     btn.disabled = true;
     try {
-      await this.api.createAppeal({ evaluation_id: this.s.ev.id, criterion_id: f.dataset.crit, comment });
+      await this.api.createAppeal({ evaluation_id: this.s.ev.id, criterion_id: f.dataset.crit, comment, reason_code });
       this.s.appealFor = null;
       toast('Апелляция подана — её увидит проверяющий в разделе «Апелляции»');
       emit('cqa-appeals-changed');
