@@ -12,3 +12,4 @@ var/
 .claude/
 CLAUDE.md
 !.env.example
+JOURNAL.md
