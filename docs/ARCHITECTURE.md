@@ -291,3 +291,32 @@ HTML/CSS/JS без сборки и без внешних CDN. Каждый эк�
 можно было вставить веб-ресурсом в форму Dynamics 365: `<cqa-conversation-list>`, `<cqa-card conversation-id="…">`,
 `<cqa-appeals>`, `<cqa-checklist-editor>`, `<cqa-journal>`; `<cqa-app>` собирает их в приложение (маршруты по `#`).
 Роль («Оператор» / «Проверяющий») переключается в шапке, без входа: оператор подаёт апелляцию, проверяющий решает.
+
+## Соответствие Microsoft Dynamics 365 Quality Evaluation Agent
+
+В Dynamics 365 Contact Center есть свой агент оценки качества — Quality Evaluation Agent (QEA). Чек-лист организаторов
+считается по тем же правилам, поэтому наш формат переносится в его структуру один к одному. Источник — документация
+Microsoft: [evaluation criteria](https://learn.microsoft.com/en-us/dynamics365/contact-center/use/evaluation-criteria),
+[manage Quality Evaluation Agent](https://learn.microsoft.com/en-us/dynamics365/contact-center/administer/manage-quality-evaluation-agent),
+[evaluation plan](https://learn.microsoft.com/en-us/dynamics365/contact-center/use/evaluation-plan),
+[use evaluations](https://learn.microsoft.com/en-us/dynamics365/contact-center/use/use-evaluations).
+
+| Наш чек-лист | Dynamics 365 QEA |
+|---|---|
+| чек-лист, версии (правка = новая версия, `parent_id`) | evaluation criteria; каждая публикация — новая версия, история и откат |
+| `section` | section; вес секции в % (у нас — сумма весов её критериев) |
+| критерий `bool` | вопрос Yes/No |
+| критерий `scale`, ступени `steps` | вопрос Single-select: у варианта балл 0–100 (ступень / верхняя ступень × 100) |
+| `weight` критерия | вес вопроса («Allow scoring for question») |
+| `na` + `na_when` | «Allow Not Applicable responses»: N/A исключается, итог — по применимым вопросам |
+| `flag` (08, грубая ошибка) | critical question: вариант «Mark as fail» проваливает оценку, балл не меняется |
+| `rules` | criteria-level instructions |
+| `guidance` критерия | question-level instructions |
+| текст ступени шкалы | answer-level instructions |
+| «Проверить на 3 диалогах» | Simulation: черновик на 25 последних разговорах, на метрики не влияет |
+| оценка (`evaluations`) | Evaluation (таблица `msdyn_evaluation`) |
+| решение проверяющего по апелляции | правка ответа проверяющим (Quality Evaluator / Manager) |
+
+Чего в документации QEA нет и что требует ТЗ хакатона: апелляции оператора с решением проверяющего, ссылки
+на конкретные реплики-доказательства, отметка «оценки разошлись», обучение на решениях проверяющих (прецеденты),
+своя модель без облака. Язык в QEA задаётся на чек-лист; поддержку казахского мы в документации не нашли.
