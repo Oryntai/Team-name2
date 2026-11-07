@@ -7,7 +7,7 @@ import {
 
 class Journal extends CqaElement {
   init() {
-    this.s = { runs: [], asks: [], meta: null };
+    this.s = { runs: [], asks: [], calls: [], meta: null };
     this.listen(this, 'click', (event) => {
       const toggle = event.target.closest('[data-ask-toggle]');
       if (toggle) toggleAskDisclosure(toggle);
@@ -18,11 +18,13 @@ class Journal extends CqaElement {
 
   async load() {
     try {
-      const [runs, meta, asks] = await Promise.all([this.api.runs(), this.s.meta ? Promise.resolve(this.s.meta) : this.api.meta(), this.api.mock ? [] : this.api.asks()]);
+      const [runs, meta, asks, calls] = await Promise.all([this.api.runs(), this.s.meta ? Promise.resolve(this.s.meta) : this.api.meta(),
+        this.api.mock ? [] : this.api.asks(), this.api.mock ? [] : this.api.checklistTestCalls()]);
       if (!this.alive) return;
       this.s.runs = [...(runs || [])].sort((a, b) => (b.id ?? 0) - (a.id ?? 0));
       this.s.meta = meta;
       this.s.asks = asks || [];
+      this.s.calls = calls || [];
       this.render();
       clearTimeout(this.timer);
       if (this.s.runs.some((r) => !isRunFinished(r))) { this.timer = setTimeout(() => this.load(), 2000); this.onCleanup(() => clearTimeout(this.timer)); }
@@ -36,6 +38,7 @@ class Journal extends CqaElement {
     const runs = this.s.runs;
     const evals = runs.reduce((a, r) => a + (r.done || 0), 0);
     const evaluationCost = runs.reduce((a, r) => a + (r.cost_usd || 0), 0);
+    const checksCost = this.s.calls.reduce((a, c) => a + (c.cost_usd || 0), 0);
     const cost = evaluationCost + this.s.asks.reduce((sum, ask) => sum + (ask.cost_usd || 0), 0);
     const per = evals ? evaluationCost / evals : null;
     const lat = runs.filter((r) => r.avg_latency_s != null && r.done);
@@ -50,7 +53,7 @@ class Journal extends CqaElement {
       <div class="cqa-kpis">
         <div class="cqa-kpi"><div class="cqa-kpi-label">${icon('play')}Прогонов</div><div class="cqa-kpi-value">${fmtInt(runs.length)}</div></div>
         <div class="cqa-kpi"><div class="cqa-kpi-label">${icon('check')}Оценок</div><div class="cqa-kpi-value">${fmtInt(evals)}</div></div>
-        <div class="cqa-kpi"><div class="cqa-kpi-label">${icon('coins')}Потрачено всего</div><div class="cqa-kpi-value">${fmtMoney(cost)}</div></div>
+        <div class="cqa-kpi"><div class="cqa-kpi-label">${icon('coins')}Потрачено всего</div><div class="cqa-kpi-value">${fmtMoney(cost + checksCost)}</div></div>
         <div class="cqa-kpi"><div class="cqa-kpi-label">${icon('coins')}Одна оценка</div><div class="cqa-kpi-value">${per == null ? '—' : fmtMoney(per)} <small>все вызовы</small></div></div>
         <div class="cqa-kpi"><div class="cqa-kpi-label">${icon('clock')}Время оценки</div><div class="cqa-kpi-value">${avgLat == null ? '—' : fmtSeconds(avgLat)} <small>в среднем</small></div></div>
       </div>
@@ -63,8 +66,17 @@ class Journal extends CqaElement {
           <div class="cqa-ask-reveal" inert aria-hidden="true"><div><div class="cqa-ask-log-body">
             ${ask.status === 'ok' ? askAnswerHtml(ask) : `<p class="cqa-muted">${esc(ask.error || 'Запрос ещё не завершён.')}</p>`}
             <div class="cqa-faint cqa-ask-meta">${esc(ask.model)} · токены ${fmtInt(ask.input_tokens)} / ${fmtInt(ask.output_tokens)}</div>
-          </div></div></div></div>`).join('') : '<p class="cqa-muted">Вопросов ещё нет. <a href="#/ask">Спросить ИИ</a></p>'}</section>`;
+          </div></div></div></div>`).join('') : '<p class="cqa-muted">Вопросов ещё нет. <a href="#/ask">Спросить ИИ</a></p>'}</section>
+      ${this.callsHtml()}`;
     this.querySelector('[data-act="reload"]')?.addEventListener('click', () => this.load());
+  }
+
+  callsHtml() {
+    const calls = this.s.calls;
+    if (!calls.length) return '';
+    return `<div class="cqa-panel cqa-panel-pad"><h3>Сверки с утверждёнными · ${fmtInt(calls.length)} вызовов</h3>
+      <div class="cqa-table-wrap"><table class="cqa-table"><thead><tr><th>Время</th><th>Диалог</th><th>Критерии</th><th>Модель</th><th>Токены вход / выход</th><th>Стоимость</th><th>Время</th><th>Статус</th></tr></thead>
+      <tbody>${calls.map((c) => `<tr><td class="cqa-nowrap">${esc(fmtDateTime(c.created_at))}</td><td><a href="#/c/${encodeURIComponent(c.conversation_id)}">${esc(c.conversation_id)}</a></td><td>${c.criteria.map(esc).join(', ')}</td><td>${esc(c.model)}</td><td>${fmtInt(c.input_tokens)} / ${fmtInt(c.output_tokens)}</td><td>${fmtMoney(c.cost_usd)}</td><td>${fmtSeconds(c.latency_s)}</td><td title="${esc(c.error || '')}">${c.status === 'ok' ? 'готово' : c.status === 'running' ? 'идёт' : `ошибка: ${esc(c.error)}`}</td></tr>`).join('')}</tbody></table></div></div>`;
   }
 
   tableHtml(runs) {

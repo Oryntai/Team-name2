@@ -25,7 +25,7 @@ from pydantic import BaseModel, Field
 from starlette.background import BackgroundTask
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from . import analytics, ask, assist, audio, callmetrics, insights, judge, pii, sandbox, sources, translate
+from . import analytics, ask, assist, audio, callmetrics, crittest, insights, judge, pii, sandbox, sources, translate
 from .checklist import allowed_answers, normalize, validate
 from .db import DB
 from .judge.providers import env as read_env
@@ -94,6 +94,13 @@ class TryIn(BaseModel):
     conversation_ids: list[str] | None = None
     provider: str | None = None
     criteria: list[str] | None = None
+
+
+class CheckApprovedIn(BaseModel):
+    config: dict
+    criteria: list[str] | None = None
+    limit: int = Field(default=12, ge=1, le=100, strict=True)
+    provider: str | None = None
 
 
 class AppealIn(BaseModel):
@@ -716,6 +723,24 @@ def create_app(db_path: str | os.PathLike | None = None, *, web_dir: str | os.Pa
             _fail(422, str(e))
         except judge.ProviderError as e:
             _fail(502, str(e))
+
+    @app.post("/api/checklists/check-approved")
+    async def checklist_check_approved(body: CheckApprovedIn):
+        cfg = normalize(body.config) if isinstance(body.config.get("criteria"), list) else body.config
+        errs = validate(cfg)
+        if errs:
+            _fail(422, "Чек-лист не проверен: исправьте ошибки.", errs)
+        pid = body.provider or default_provider()
+        if pid not in visible_providers():
+            _fail(422, f"Неизвестная модель «{pid}».")
+        try:
+            return await crittest.check_approved(db, cfg, judge.get_provider(pid), body.criteria, body.limit)
+        except ValueError as e:
+            _fail(422, str(e))
+
+    @app.get("/api/checklist-checks/calls")
+    async def checklist_test_calls():
+        return db.criterion_test_calls()
 
     @app.post("/api/checklists", status_code=201)
     async def checklist_create(body: ChecklistIn):

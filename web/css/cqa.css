@@ -534,6 +534,13 @@ a.cqa-ref:hover { background: var(--cqa-mint-100); border-bottom-style: solid; b
 details.cqa-details > summary { cursor: pointer; font-weight: 700; color: var(--cqa-green-700); list-style: none; display: inline-flex; gap: 6px; align-items: center; }
 details.cqa-details > summary::-webkit-details-marker { display: none; }
 details.cqa-details[open] > summary .cqa-icon { transform: rotate(90deg); }
+.cqa-approved { background: #fff; padding: 12px; display: grid; gap: 8px; }
+.cqa-approved p { margin: 4px 0; }
+.cqa-approved-detail { overflow: hidden; }
+.cqa-approved-body { padding: 4px 12px 12px 32px; display: grid; gap: 12px; }
+.cqa-approved [aria-expanded] > .cqa-icon { transition: transform .144s ease-out; }
+.cqa-approved [aria-expanded="true"] > .cqa-icon { transform: rotate(90deg); transition-duration: .18s; }
+@media (prefers-reduced-motion: reduce) { .cqa-approved [aria-expanded] > .cqa-icon { transition: none; } }
 
 /* ---------- диалог (modal) ---------- */
 .cqa-dialog { border: 0; padding: 0; border-radius: 16px; box-shadow: var(--cqa-shadow-lg); width: min(520px, calc(100vw - 32px)); color: var(--cqa-text); font-family: var(--cqa-font); }
