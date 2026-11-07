@@ -3,8 +3,7 @@
 import { CqaElement } from '../base.js';
 import {
   esc, icon, fmtDateTime, fmtInt, fmtPts, fmtMoney, fmtClock, toast, debounce, clone, emit, pollRun, isRunFinished,
-  providerLabel, plural, TYPE_LABEL, secondsBetween,
-} from '../util.js';
+  providerLabel, plural, TYPE_LABEL, secondsBetween, PROVIDER_DESC } from '../util.js';
 
 const FIELDS = ['section', 'title', 'type', 'weight', 'na', 'yes', 'no', 'na_when', 'steps', 'guidance'];
 const FIELD_LABEL = { section: 'секция', title: 'название', type: 'тип', weight: 'вес', na: 'N/A', yes: '«Да»', no: '«Нет»', na_when: 'условие N/A', steps: 'шкала', guidance: 'пояснение' };
@@ -321,7 +320,7 @@ class ChecklistEditor extends CqaElement {
         <label class="cqa-field"><span class="cqa-label">Набор</span><select class="cqa-select cqa-select--sm" data-f="apply-dataset" ${run && !fin ? 'disabled' : ''}>
           ${datasets.map((d) => `<option value="${esc(d.id)}" ${d.id === this.s.applyDataset ? 'selected' : ''}>${esc(d.id)} · ${fmtInt(d.total)} ${plural(d.total, 'диалог', 'диалога', 'диалогов')}</option>`).join('') || '<option value="">нет наборов — импортируйте в «Диалогах»</option>'}</select></label>
         <label class="cqa-field"><span class="cqa-label">Модель</span><select class="cqa-select cqa-select--sm" data-f="apply-provider" ${run && !fin ? 'disabled' : ''}>
-          ${providers.map((p) => `<option value="${esc(p.id)}" ${p.id === this.s.applyProvider ? 'selected' : ''} ${p.available === false ? 'disabled' : ''}>${esc(p.label || p.id)}</option>`).join('')}</select></label>
+          ${providers.map((p) => `<option value="${esc(p.id)}" data-desc="${esc(PROVIDER_DESC[p.id] || '')}" ${p.id === this.s.applyProvider ? 'selected' : ''} ${p.available === false ? 'disabled' : ''}>${esc(p.label || p.id)}</option>`).join('')}</select></label>
         <button type="button" class="cqa-btn cqa-btn--primary" data-act="apply" ${!datasets.length || !this.s.plan || this.isDirty() || (run && !fin) ? 'disabled' : ''} title="${this.isDirty() ? 'Сначала сохраните изменения' : ''}">${icon('play')}Применить к набору</button>
         <button type="button" class="cqa-btn" data-act="try" ${!datasets.length || !this.s.applyProvider || this.s.trial.busy ? 'disabled' : ''} title="Проверить текущий черновик без сохранения на диалогах из загруженных наборов">${this.s.trial.busy ? '<span class="cqa-spinner"></span>Проверяю…' : `${icon('eye')}Проверить на 3 диалогах`}</button>
         ${this.isDirty() ? '<span class="cqa-faint" style="font-size:12.5px">для применения к набору сохраните изменения как новую версию</span>' : ''}

@@ -601,3 +601,45 @@ cqa-card { container-type: inline-size; container-name: cqa-card; }
 .cqa-inline-label { font-size: 12.5px; color: var(--cqa-muted); }
 .cqa-inline-value { font-size: 13px; font-weight: 600; color: var(--cqa-green-800); text-decoration: none; margin-right: 6px; }
 .cqa-inline-value:hover { text-decoration: underline; }
+
+/* Свой выпадающий список (web/js/dropdown.js). Движение: открытие из кнопки ~180 мс с замедлением,
+   закрытие на 20% быстрее обратно в кнопку, без пружины; при «уменьшить движение» — без анимации. */
+.cqa-dd { position: relative; display: inline-block; min-width: 0; max-width: 100%; }
+.cqa-field .cqa-dd { display: block; }
+.cqa-toolbar .cqa-dd { max-width: 280px; }
+.cqa-dd-native { position: absolute !important; opacity: 0; pointer-events: none; width: 1px !important; height: 1px; inset: 0 auto auto 0; }
+.cqa-dd-btn { display: flex; align-items: center; justify-content: space-between; gap: 8px; width: 100%; min-height: 38px;
+  padding: 7px 10px 7px 12px; border: 1px solid var(--cqa-border-strong); border-radius: var(--cqa-radius-sm);
+  background: var(--cqa-surface); color: var(--cqa-text); font: inherit; font-size: 14px; text-align: left; cursor: pointer;
+  transition: border-color .15s ease-out, box-shadow .15s ease-out, transform .1s ease-out; }
+.cqa-dd--sm .cqa-dd-btn { min-height: 32px; padding: 5px 8px 5px 10px; font-size: 13px; }
+.cqa-dd-btn:hover { border-color: var(--cqa-green-600); }
+.cqa-dd-btn:focus-visible, .cqa-dd.is-open .cqa-dd-btn { outline: none; border-color: var(--cqa-green-600); box-shadow: var(--cqa-focus); }
+.cqa-dd-btn:disabled { opacity: .55; cursor: default; }
+.cqa-dd-btn .cqa-icon { flex: none; color: var(--cqa-muted); transition: transform .18s ease-out; }
+.cqa-dd.is-open .cqa-dd-btn .cqa-icon { transform: rotate(180deg); }
+.cqa-dd-value { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cqa-dd-menu { position: absolute; top: calc(100% + 6px); left: 0; z-index: 60; min-width: 100%; width: max-content;
+  max-width: min(380px, 92vw); max-height: 340px; overflow: auto; padding: 6px; background: var(--cqa-surface);
+  border: 1px solid var(--cqa-border); border-radius: var(--cqa-radius); box-shadow: var(--cqa-shadow-lg);
+  transform-origin: top left; opacity: 0; transform: scale(.95) translateY(-4px); visibility: hidden; pointer-events: none;
+  transition: opacity .145s ease-in, transform .145s ease-in, visibility 0s linear .145s; }
+.cqa-dd-menu.is-right { left: auto; right: 0; transform-origin: top right; }
+.cqa-dd.is-open .cqa-dd-menu { opacity: 1; transform: none; visibility: visible; pointer-events: auto;
+  transition: opacity .18s cubic-bezier(.16, 1, .3, 1), transform .18s cubic-bezier(.16, 1, .3, 1), visibility 0s; }
+.cqa-dd-opt { display: grid; grid-template-columns: 18px minmax(0, 1fr); gap: 8px; align-items: start; padding: 8px 10px;
+  border-radius: var(--cqa-radius-sm); cursor: pointer; transition: background-color .12s ease-out; }
+.cqa-dd-opt:hover, .cqa-dd-opt.is-active { background: var(--cqa-mint-50); }
+.cqa-dd-opt[aria-selected="true"] .cqa-dd-label { font-weight: 700; color: var(--cqa-green-900); }
+.cqa-dd-opt[aria-disabled="true"] { opacity: .45; cursor: not-allowed; }
+.cqa-dd-opt[aria-disabled="true"]:hover { background: none; }
+.cqa-dd-check { display: grid; place-items: center; height: 20px; color: var(--cqa-green-600); }
+.cqa-dd-label { display: block; font-size: 13.5px; line-height: 20px; white-space: nowrap; }
+.cqa-dd-desc { display: block; margin-top: 1px; font-size: 12px; line-height: 1.35; color: var(--cqa-muted); white-space: normal; max-width: 320px; }
+/* нажатие: лёгкое сжатие кнопок */
+.cqa-btn { transition: background-color .15s ease-out, border-color .15s ease-out, box-shadow .15s ease-out, transform .1s ease-out; }
+.cqa-btn:active:not(:disabled), .cqa-dd-btn:active:not(:disabled) { transform: scale(.97); }
+@media (prefers-reduced-motion: reduce) {
+  .cqa-dd-menu, .cqa-dd.is-open .cqa-dd-menu, .cqa-dd-btn .cqa-icon, .cqa-btn { transition: none; }
+  .cqa-btn:active:not(:disabled), .cqa-dd-btn:active:not(:disabled) { transform: none; }
+}

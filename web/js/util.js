@@ -235,3 +235,11 @@ export function plural(n, one, few, many) {
   if (b === 1) return one;
   return many;
 }
+
+// Подсказки к моделям в выпадающих списках (атрибут data-desc у <option>).
+export const PROVIDER_DESC = {
+  haiku: 'По умолчанию · 3 прогона на оценку, ≈ $0,004',
+  sonnet: 'Крупнее и примерно в 10 раз дороже',
+  local: 'Открытая модель на этом компьютере — данные не уходят в облако',
+  fake: 'Без модели — только для тестов',
+};

@@ -3,6 +3,7 @@
 import { CqaElement } from './base.js';
 import { isMock } from './api.js';
 import { icon, getRole, setRole } from './util.js';
+import './dropdown.js';
 import './components/conversation-list.js';
 import './components/card.js';
 import './components/appeals.js';

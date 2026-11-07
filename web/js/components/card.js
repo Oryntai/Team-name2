@@ -4,8 +4,7 @@ import { CqaElement } from '../base.js';
 import {
   esc, icon, fmtScore, fmtPts, fmtDateTime, fmtMoney, fmtSeconds, fmtInt, fmtTs, fmtClock, answerTone, answerLabel,
   evidenceLabel, scoreTone, pctTone, linkifyRefs, isCall, CHANNEL_LABEL, ROLE_LABEL, toast, getRole, providerLabel,
-  checklistLabel, navigate, emit, pollRun, isRunFinished, plural,
-} from '../util.js';
+  checklistLabel, navigate, emit, pollRun, isRunFinished, plural, PROVIDER_DESC } from '../util.js';
 
 const TONE_COLOR = { yes: 'var(--cqa-yes)', ok: 'var(--cqa-yes)', mid: '#d9a03a', no: 'var(--cqa-no)', na: 'var(--cqa-na)', gross: 'var(--cqa-gross)' };
 const checklistCache = new Map();
@@ -173,7 +172,7 @@ class Card extends CqaElement {
         <label class="cqa-field"><span class="cqa-label">Чек-лист</span><select class="cqa-select cqa-select--sm" data-f="rerun-checklist">
           ${[...checklists].sort((a, b) => b.id - a.id).map((c) => `<option value="${c.id}" ${c.id === curC ? 'selected' : ''}>${esc(checklistLabel(c))}</option>`).join('')}</select></label>
         <label class="cqa-field"><span class="cqa-label">Модель</span><select class="cqa-select cqa-select--sm" data-f="rerun-provider">
-          ${avail.map((p) => `<option value="${esc(p.id)}" ${p.id === curP ? 'selected' : ''} ${p.available === false ? 'disabled' : ''}>${esc(p.label || p.id)}${p.available === false ? ' — не настроена' : ''}</option>`).join('')}</select></label>
+          ${avail.map((p) => `<option value="${esc(p.id)}" data-desc="${esc(PROVIDER_DESC[p.id] || '')}" ${p.id === curP ? 'selected' : ''} ${p.available === false ? 'disabled' : ''}>${esc(p.label || p.id)}${p.available === false ? ' — не настроена' : ''}</option>`).join('')}</select></label>
         <button type="button" class="cqa-btn cqa-btn--primary" data-act="rerun-start" ${run && !isRunFinished(run) ? 'disabled' : ''}>${icon('play')}${ev ? 'Оценить заново' : 'Оценить диалог'}</button>
         <span data-part="rerun-status">${status}</span>
       </div>

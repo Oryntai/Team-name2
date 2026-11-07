@@ -2,8 +2,7 @@
 import { CqaElement } from '../base.js';
 import {
   esc, icon, fmtScore, fmtDateTime, fmtMoney, fmtClock, fmtDuration, fmtInt, scoreTone, isCall, CHANNEL_LABEL,
-  toast, pollRun, isRunFinished, store, providerLabel, checklistLabel, navigate, emit, secondsBetween, plural,
-} from '../util.js';
+  toast, pollRun, isRunFinished, store, providerLabel, checklistLabel, navigate, emit, secondsBetween, plural, PROVIDER_DESC } from '../util.js';
 
 const RUN_KEY = 'cqa.activeRun';
 const LANG_ORDER = ['RU', 'KZ', 'EN'];
@@ -145,7 +144,7 @@ class ConversationList extends CqaElement {
         </select>` : `<a class="cqa-inline-value" href="#/checklist" title="Открыть чек-лист">${checklists.length ? esc(checklistLabel(checklists[0])) : 'нет'}</a>`}
         <span class="cqa-inline-label">Модель</span>
         <select class="cqa-select cqa-select--sm" data-f="provider" aria-label="Модель" title="Модель" ${busy ? 'disabled' : ''}>
-          ${providers.map((p) => `<option value="${esc(p.id)}" ${p.id === this.s.provider ? 'selected' : ''} ${p.available === false ? 'disabled' : ''}>${esc(p.label || p.id)}${p.available === false ? ' — не настроена' : ''}</option>`).join('')}
+          ${providers.map((p) => `<option value="${esc(p.id)}" data-desc="${esc(PROVIDER_DESC[p.id] || '')}" ${p.id === this.s.provider ? 'selected' : ''} ${p.available === false ? 'disabled' : ''}>${esc(p.label || p.id)}${p.available === false ? ' — не настроена' : ''}</option>`).join('')}
         </select>
         <button type="button" class="cqa-btn" data-act="run-selected" ${nsel ? '' : 'hidden'} ${busy ? 'disabled' : ''}>Оценить выбранные <span class="cqa-num" data-part="sel-count">(${nsel})</span></button>
         <button type="button" class="cqa-btn cqa-btn--primary" data-act="run-all" ${busy ? 'disabled' : ''}>${icon('play')}Оценить все <span class="cqa-num" data-part="all-count">(0)</span></button>
