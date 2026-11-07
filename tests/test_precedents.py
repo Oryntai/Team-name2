@@ -410,3 +410,39 @@ def test_prepare_failure_falls_back_without_raising(multilingual, monkeypatch):
     monkeypatch.setattr(judge, "get_provider", lambda pid: Broken())
     assert asyncio.run(precedents.prepare(db, db.record("kzq"), _Cloud()))[1] == 1
     assert [p["conversation_id"] for p in precedents.select(db, db.record("kzq"), cfg)] == ["kz_other"]
+
+
+def test_failed_pool_translation_is_tried_once_for_parallel_evaluations(multilingual, monkeypatch):
+    db, cfg = multilingual
+    calls = []
+
+    class Malformed:
+        pid, model = "haiku", "bad"
+
+        async def complete(self, *args, **kwargs):
+            calls.append(1)
+            await asyncio.sleep(0)
+            return judge.providers.Reply(text="[]", model="bad")
+
+    monkeypatch.setattr(judge, "available", lambda pid: True)
+    monkeypatch.setattr(judge, "get_provider", lambda pid: Malformed())
+    db.save_dataset("TEST", "fake", [lang_record(f"ru{i}", "RU", "Вопрос") for i in range(10)])
+
+    async def batch():
+        return await asyncio.gather(*(precedents.prepare(db, db.record(f"ru{i}"), _Cloud()) for i in range(10)))
+
+    asyncio.run(batch())
+    assert len(calls) == 1  # kz_other из пула — одна неудачная попытка, а не десять
+
+
+def test_open_appeal_dialog_is_not_translated_for_search(multilingual, monkeypatch):
+    db, cfg = multilingual
+    from cqa import translate
+    db.save_dataset("LOCAL", "fake", [lang_record("private", "EN", "local only")])
+    ev = db.insert_evaluation({"conversation_id": "private", "checklist_id": 1, "provider": "local",
+                               "model": "own", "status": "ok", "answers": {}})
+    db.create_appeal(ev, "01", "Ждёт решения")
+    monkeypatch.setattr(judge, "available", lambda pid: True)
+    monkeypatch.setattr(judge, "get_provider", lambda pid: translate.FakeTranslationProvider())
+    asyncio.run(precedents.prepare(db, db.record("ru_same"), _Cloud()))
+    assert db.translation("private")["translation"] is None

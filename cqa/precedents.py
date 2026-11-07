@@ -15,6 +15,7 @@ import math
 import os
 from pathlib import Path
 import re
+import weakref
 
 from .checklist import load_default
 from .incremental import fingerprints
@@ -24,7 +25,14 @@ REFERENCE = Path(__file__).with_suffix("") / "dev_reference.json"
 # API различает подтверждённый и изменённый ответ; принимаем также общий статус decided.
 DECIDED = {"confirmed", "changed", "decided"}
 ROLE = {"client": "клиент", "operator": "оператор", "system": "событие"}
-_LOCKS: dict[tuple[int, str], asyncio.Lock] = {}
+# По циклу событий: замок на перевод диалога и диалоги, перевод которых в этом цикле не удался (не повторяем).
+_LOCKS: "weakref.WeakKeyDictionary[asyncio.AbstractEventLoop, dict[str, asyncio.Lock]]" = weakref.WeakKeyDictionary()
+_FAILED: "weakref.WeakKeyDictionary[asyncio.AbstractEventLoop, set[str]]" = weakref.WeakKeyDictionary()
+
+
+def translation_lock(cid: str) -> asyncio.Lock:
+    """Один замок на перевод диалога для карточки и для поиска похожих: перевод оплачивается один раз."""
+    return _LOCKS.setdefault(asyncio.get_running_loop(), {}).setdefault(cid, asyncio.Lock())
 
 
 def _is_ru(language) -> bool:
@@ -60,24 +68,27 @@ async def prepare(db, record: dict, provider) -> tuple[float, int]:
     if PROVIDERS.get(provider.pid, {}).get("kind") != "anthropic" or not judge.available("haiku"):
         return 0.0, 0
     reference = json.loads(REFERENCE.read_text(encoding="utf-8"))["dialogs"]
+    # Только решённые апелляции — как в select(): открытая апелляция прецедентом не станет, переводить её незачем.
     reviewed = {row["conversation_id"] for row in db.q(
-        "SELECT DISTINCT e.conversation_id FROM appeals a JOIN evaluations e ON e.id = a.evaluation_id")}
+        "SELECT DISTINCT e.conversation_id FROM appeals a JOIN evaluations e ON e.id = a.evaluation_id "
+        f"WHERE a.status IN ({','.join('?' * len(DECIDED))})", tuple(sorted(DECIDED)))}
     pool = [db.record(cid) for cid in sorted(set(reference) | reviewed) if cid != record["conversation_id"]]
     todo = [r for r in [record, *pool] if r and r.get("transcript") and not _is_ru(r.get("language"))
             and _ru_texts(db, r["conversation_id"], r["transcript"]) is None]
     if not todo:
         return 0.0, 0
     translator = judge.get_provider("haiku")
-    loop = id(asyncio.get_running_loop())
 
     async def one(rec) -> tuple[float, int]:
         cid = rec["conversation_id"]
-        async with _LOCKS.setdefault((loop, cid), asyncio.Lock()):  # параллельные оценки не платят дважды
-            if _ru_texts(db, cid, rec["transcript"]) is not None:
+        failed = _FAILED.setdefault(asyncio.get_running_loop(), set())
+        async with translation_lock(cid):  # параллельные оценки и карточка не платят дважды
+            if cid in failed or _ru_texts(db, cid, rec["transcript"]) is not None:
                 return 0.0, 0
             try:
                 result = await translate.translate(db, rec, translator)
             except Exception as e:  # noqa: BLE001 — без перевода сравним по исходному тексту
+                failed.add(cid)
                 log.warning("перевод %s для поиска похожих не получен: %s", cid, e)
                 return 0.0, 1
             return float(result.get("cost_usd") or 0.0), 1

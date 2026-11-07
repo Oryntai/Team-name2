@@ -25,8 +25,8 @@ from pydantic import BaseModel, Field
 from starlette.background import BackgroundTask
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from . import (analytics, ask, assist, audio, calibrations, callmetrics, crittest, doubts, insights, judge, pii, sandbox,
-               sources, translate)
+from . import (analytics, ask, assist, audio, calibrations, callmetrics, crittest, doubts, insights, judge, pii,
+               precedents, sandbox, sources, translate)
 from .checklist import allowed_answers, normalize, validate
 from .db import DB
 from .judge.providers import env as read_env
@@ -210,7 +210,6 @@ def create_app(db_path: str | os.PathLike | None = None, *, web_dir: str | os.Pa
 
     app = FastAPI(title="CQA — Conversation Quality Analytics", version="0.1.0", lifespan=lifespan)
     app.state.db, app.state.runner = db, runner
-    translation_locks: dict[str, asyncio.Lock] = {}
     app.state.insights_runner = insights_runner
     app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
     app.add_middleware(CacheHeaders)
@@ -535,7 +534,7 @@ def create_app(db_path: str | os.PathLike | None = None, *, web_dir: str | os.Pa
     @app.post("/api/conversations/{cid}/translate")
     async def conversation_translate(cid: str, body: TranslateIn | None = None):
         # Соседние запросы к одному диалогу ждут тот же перевод, без повторной оплаты.
-        async with translation_locks.setdefault(cid, asyncio.Lock()):
+        async with precedents.translation_lock(cid):  # тот же замок, что у перевода для поиска похожих
             record = db.record(cid)
             if not record:
                 _fail(404, f"Диалог {cid} не найден.")
