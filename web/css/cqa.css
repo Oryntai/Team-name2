@@ -694,3 +694,50 @@ cqa-card { container-type: inline-size; container-name: cqa-card; }
   .cqa-crit[open] .cqa-crit-body, .cqa-thinking[open] .cqa-thinking-run { animation: none; }
   .cqa-crit-chev, .cqa-thinking > summary > .cqa-icon:last-child { transition: none; }
 }
+
+/* ===== Карточка: значки критериев у реплик и всплывающее окно с объяснением ===== */
+.cqa-crit { cursor: pointer; }
+.cqa-crit .cqa-crit-head { padding: 11px 6px 11px 14px; border-radius: var(--cqa-radius-sm); grid-template-columns: auto minmax(0, 1fr) auto auto auto;
+  transition: background-color .12s ease-out; }
+.cqa-crit:hover .cqa-crit-head, .cqa-crit.is-active .cqa-crit-head { background: var(--cqa-mint-50); }
+.cqa-crit:focus-visible { outline: none; }
+.cqa-crit:focus-visible .cqa-crit-head { box-shadow: var(--cqa-focus); }
+.cqa-crit-chev { transition: transform .15s ease-out; }
+.cqa-crit:hover .cqa-crit-chev { transform: translateX(2px); }
+.cqa-crit-hint { margin: 14px 2px 0; font-size: 12.5px; color: var(--cqa-faint); }
+.cqa-mark-row { display: inline-flex; gap: 4px; margin-left: 8px; vertical-align: middle; }
+.cqa-mark { display: inline-grid; place-items: center; min-width: 26px; height: 20px; padding: 0 6px; border-radius: 999px;
+  border: 1px solid var(--cqa-na-border); background: var(--cqa-na-bg); color: var(--cqa-na);
+  font: 800 11px/1 var(--cqa-mono); cursor: pointer; transition: transform .1s ease-out, box-shadow .15s ease-out, background-color .15s ease-out; }
+.cqa-mark[data-tone="yes"] { border-color: var(--cqa-yes-border); background: var(--cqa-yes-bg); color: var(--cqa-yes); }
+.cqa-mark[data-tone="mid"] { border-color: var(--cqa-mid-border); background: var(--cqa-mid-bg); color: var(--cqa-mid); }
+.cqa-mark[data-tone="no"] { border-color: var(--cqa-no-border); background: var(--cqa-no-bg); color: var(--cqa-no); }
+.cqa-mark[data-tone="gross"] { border-color: var(--cqa-gross-border); background: var(--cqa-gross-bg); color: var(--cqa-gross); }
+.cqa-mark:hover { box-shadow: 0 0 0 3px rgba(32, 129, 87, .14); }
+.cqa-mark:active { transform: scale(.94); }
+.cqa-mark.is-on { box-shadow: 0 0 0 2px var(--cqa-green-600); }
+.cqa-msg--system .cqa-mark-row { margin-left: 6px; }
+.cqa-pop { position: fixed; z-index: 80; max-height: min(70vh, 560px); overflow: auto; padding: 14px 16px 12px;
+  background: var(--cqa-surface); border: 1px solid var(--cqa-border); border-radius: var(--cqa-radius); box-shadow: var(--cqa-shadow-lg);
+  opacity: 0; transform: scale(.95); visibility: hidden; pointer-events: none;
+  transition: opacity .145s ease-in, transform .145s ease-in, visibility 0s linear .145s; }
+.cqa-pop.is-open { opacity: 1; transform: none; visibility: visible; pointer-events: auto;
+  transition: opacity .18s cubic-bezier(.16, 1, .3, 1), transform .18s cubic-bezier(.16, 1, .3, 1), visibility 0s; }
+.cqa-pop-head { display: flex; align-items: center; gap: 8px; padding-right: 28px; color: var(--cqa-green-950); font-size: 14.5px; }
+.cqa-pop-x { position: absolute; top: 8px; right: 8px; display: grid; place-items: center; width: 28px; height: 28px; border: 0; border-radius: 8px;
+  background: none; color: var(--cqa-muted); cursor: pointer; }
+.cqa-pop-x:hover { background: var(--cqa-mint-50); color: var(--cqa-text); }
+.cqa-dialog-head .cqa-pop-x { position: static; margin-left: auto; }
+.cqa-pop-verdict { display: flex; align-items: center; gap: 10px; margin-top: 10px; }
+.cqa-pop-pts { font-size: 13px; font-weight: 700; color: var(--cqa-text-2); font-variant-numeric: tabular-nums; }
+.cqa-pop-text { margin: 10px 0 0; line-height: 1.5; color: var(--cqa-text); }
+.cqa-pop-split { display: flex; gap: 6px; align-items: flex-start; margin: 10px 0 0; padding: 7px 9px; border-radius: 8px;
+  background: var(--cqa-mid-bg); color: #6d4708; font-size: 12.5px; line-height: 1.4; }
+.cqa-pop .cqa-crit-step { margin-top: 10px; }
+.cqa-pop .cqa-appeal { margin-top: 10px; }
+.cqa-think-btn { display: inline-flex; align-items: center; gap: 5px; font-weight: 700; }
+.cqa-dialog--wide { width: min(720px, 94vw); }
+.cqa-dialog--wide .cqa-dialog-body { max-height: 62vh; overflow: auto; }
+.cqa-tabs { margin-bottom: 10px; }
+.cqa-dialog--wide .cqa-thinking-run { padding: 0; }
+@media (prefers-reduced-motion: reduce) { .cqa-pop, .cqa-pop.is-open { transition: none; } }
