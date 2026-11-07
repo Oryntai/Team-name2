@@ -43,6 +43,10 @@ CREATE TABLE IF NOT EXISTS appeals(
   id INTEGER PRIMARY KEY AUTOINCREMENT, evaluation_id INTEGER, criterion_id TEXT, comment TEXT, created_at TEXT,
   status TEXT, new_answer TEXT, reason TEXT, decided_at TEXT);
 CREATE INDEX IF NOT EXISTS appeals_eval ON appeals(evaluation_id);
+CREATE TABLE IF NOT EXISTS criterion_test_calls(
+  id INTEGER PRIMARY KEY AUTOINCREMENT, created_at TEXT, conversation_id TEXT, checklist_id INTEGER,
+  criteria TEXT NOT NULL, provider TEXT, model TEXT, status TEXT, error TEXT, latency_s REAL DEFAULT 0,
+  input_tokens INTEGER DEFAULT 0, output_tokens INTEGER DEFAULT 0, cost_usd REAL DEFAULT 0);
 """
 
 
@@ -300,6 +304,24 @@ class DB:
         row = self.one("SELECT id FROM evaluations WHERE conversation_id=? AND model=? AND status='ok' "
                        "ORDER BY id DESC LIMIT 1", (cid, model))
         return self.evaluation(row["id"]) if row else None
+
+    # Вызовы проверки черновика храним отдельно от оценок и прогонов.
+    def start_criterion_test_call(self, cid: str, checklist_id: int, criteria: list[str], provider: str, model: str) -> int:
+        return self.ex("INSERT INTO criterion_test_calls(created_at, conversation_id, checklist_id, criteria, "
+                       "provider, model, status) VALUES(?,?,?,?,?,?,'running')",
+                       (now(), cid, checklist_id, json.dumps(criteria), provider, model))
+
+    def finish_criterion_test_call(self, call_id: int, result: dict) -> None:
+        self.ex("UPDATE criterion_test_calls SET model=COALESCE(?,model), status=?, error=?, latency_s=?, "
+                "input_tokens=?, output_tokens=?, cost_usd=? WHERE id=?",
+                (result.get("model"), result["status"], result.get("error"), result.get("latency_s", 0),
+                 result.get("input_tokens", 0), result.get("output_tokens", 0), result.get("cost_usd", 0), call_id))
+
+    def criterion_test_calls(self) -> list[dict]:
+        rows = self.q("SELECT * FROM criterion_test_calls ORDER BY id DESC")
+        for row in rows:
+            row["criteria"] = _json(row["criteria"], [])
+        return rows
 
     def evaluations_for(self, cid: str) -> list[dict]:
         rows = self.q("SELECT * FROM evaluations WHERE conversation_id=? ORDER BY id DESC", (cid,))

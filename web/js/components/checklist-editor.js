@@ -44,7 +44,7 @@ class ChecklistEditor extends CqaElement {
       list: [], selId: this.getAttribute('checklist-id'), loaded: null, parent: null, draft: null, open: new Set(),
       validation: null, validating: false, note: '', meta: null, datasets: [], applyDataset: null, applyProvider: null, run: null, justSaved: null,
       assists: new Map(),
-      full: false, plan: null, planError: null, diff: null, trial: {},
+      full: false, plan: null, planError: null, diff: null, trial: {}, approved: {}, approvedLimit: 12,
     };
     this.validateSoon = debounce(() => this.validate(), 350);
     this.innerHTML = '<div class="cqa-loading"><span class="cqa-spinner cqa-spinner--lg"></span>Загружаю чек-листы…</div>';
@@ -85,6 +85,8 @@ class ChecklistEditor extends CqaElement {
     this.s.assists = new Map();
     this.trySeq = (this.trySeq || 0) + 1;
     this.s.trial = {};
+    this.approvedSeq = (this.approvedSeq || 0) + 1;
+    this.s.approved = {};
     if (parent) for (const c of loaded.config.criteria || []) {
       const p = (parent.config.criteria || []).find((x) => x.id === c.id);
       if (!p || FIELDS.some((f) => !same(normField(c, f), normField(p, f)))) this.s.open.add(c.id);
@@ -323,9 +325,12 @@ class ChecklistEditor extends CqaElement {
           ${providers.map((p) => `<option value="${esc(p.id)}" data-desc="${esc(PROVIDER_DESC[p.id] || '')}" ${p.id === this.s.applyProvider ? 'selected' : ''} ${p.available === false ? 'disabled' : ''}>${esc(p.label || p.id)}</option>`).join('')}</select></label>
         <button type="button" class="cqa-btn cqa-btn--primary" data-act="apply" ${!datasets.length || !this.s.plan || this.isDirty() || (run && !fin) ? 'disabled' : ''} title="${this.isDirty() ? 'Сначала сохраните изменения' : ''}">${icon('play')}Применить к набору</button>
         <button type="button" class="cqa-btn" data-act="try" ${!datasets.length || !this.s.applyProvider || this.s.trial.busy ? 'disabled' : ''} title="Проверить текущий черновик без сохранения на диалогах из загруженных наборов">${this.s.trial.busy ? '<span class="cqa-spinner"></span>Проверяю…' : `${icon('eye')}Проверить на 3 диалогах`}</button>
+        <button type="button" class="cqa-btn" data-act="check-approved" ${this.s.approved.busy ? 'disabled' : ''}>${this.s.approved.busy ? '<span class="cqa-spinner"></span>Сверяю…' : `${icon('check')}Сверить с утверждёнными оценками`}</button>
+        <label class="cqa-field"><span class="cqa-label">До диалогов</span><input class="cqa-input cqa-num" style="width:80px" type="number" min="1" max="100" step="1" data-f="approved-limit" value="${esc(this.s.approvedLimit)}" aria-label="Лимит диалогов для сверки"></label>
         ${this.isDirty() ? '<span class="cqa-faint" style="font-size:12.5px">для применения к набору сохраните изменения как новую версию</span>' : ''}
       </div>
       <div aria-live="polite">${this.tryHtml()}</div>
+      <div aria-live="polite">${this.approvedHtml()}</div>
       ${progress}
       ${fin ? this.diffHtml() : ''}
     </div>`;
@@ -336,6 +341,73 @@ class ChecklistEditor extends CqaElement {
   }
 
   tryKey() { return JSON.stringify([cleanConfig(this.s.draft), this.s.applyProvider]); }
+
+  approvedKey() { return JSON.stringify([this.tryKey(), this.s.approvedLimit]); }
+
+  async checkApproved() {
+    if (this.s.approved.busy) return;
+    if (this.api.mock) {
+      this.s.approved = { error: 'Сверка доступна при запуске сервера CQA.' };
+      this.refreshChrome(); return;
+    }
+    if (!Number.isInteger(this.s.approvedLimit) || this.s.approvedLimit < 1 || this.s.approvedLimit > 100) {
+      toast('Лимит диалогов — от 1 до 100', 'warn'); return;
+    }
+    const seq = this.approvedSeq = (this.approvedSeq || 0) + 1;
+    this.s.approved = { busy: true, key: this.approvedKey() };
+    this.refreshChrome();
+    try {
+      const result = await this.api.checkApproved({ config: cleanConfig(this.s.draft), provider: this.s.applyProvider,
+        limit: this.s.approvedLimit });
+      if (!this.alive || seq !== this.approvedSeq) return;
+      this.s.approved.result = result;
+    } catch (e) {
+      if (!this.alive || seq !== this.approvedSeq) return;
+      this.s.approved.error = e.message;
+    }
+    if (!this.alive || seq !== this.approvedSeq) return;
+    this.s.approved.busy = false;
+    this.refreshChrome();
+  }
+
+  approvedHtml() {
+    const t = this.s.approved;
+    if (t.busy) return '<p class="cqa-faint"><span class="cqa-spinner"></span>Сверяю изменённые критерии…</p>';
+    if (t.key && t.key !== this.approvedKey()) return '<p class="cqa-faint">Черновик, модель или лимит изменились. Повторите сверку.</p>';
+    if (t.error) return `<div class="cqa-error-box">Сверка не удалась: ${esc(t.error)}</div>`;
+    const r = t.result;
+    if (!r) return '';
+    return `<div class="cqa-approved" role="region" aria-label="Сверка с утверждёнными оценками">
+      ${r.message ? `<p class="cqa-muted">${esc(r.message)}</p>` : ''}
+      ${r.criteria.map((c) => !c.available ? `<div><span class="cqa-crit-id">${esc(c.id)}</span><p class="cqa-muted">${esc(c.message)}</p><button type="button" class="cqa-btn cqa-btn--sm" data-act="try">Проверить на 3 диалогах</button></div>` : `
+        <div class="cqa-approved-row">
+          <button type="button" class="cqa-btn cqa-btn--ghost" data-act="approved-toggle" aria-expanded="false" aria-controls="approved-${esc(c.id)}" title="${esc(c.title)}">${icon('right')}<b>${esc(c.id)} · ${c.total ? `совпало ${fmtInt(c.matched)} из ${fmtInt(c.total)}` : 'не удалось сверить'}${c.errors.length ? ` · ошибок ${fmtInt(c.errors.length)}` : ''}</b></button>
+          <div class="cqa-approved-detail" id="approved-${esc(c.id)}" hidden>
+            <div class="cqa-approved-body"><p class="cqa-faint">${esc(c.title)} · проверено ${fmtInt(c.total)} из ${fmtInt(c.available)} утверждённых</p>
+            ${c.disagreements.map((d) => `<div class="cqa-stack"><div><a href="#/c/${encodeURIComponent(d.conversation_id)}">${esc(d.conversation_id)}</a> · ${esc(d.approved_answer)} → <b>${esc(d.answer)}</b></div><p>${esc(d.explanation)}</p></div>`).join('')}
+            ${!c.disagreements.length && c.total ? '<p class="cqa-muted">Расхождений нет.</p>' : ''}
+            ${c.errors.map((e) => `<p class="cqa-error-box"><a href="#/c/${encodeURIComponent(e.conversation_id)}">${esc(e.conversation_id)}</a> · ${esc(e.error)}</p>`).join('')}</div>
+          </div>
+        </div>`).join('')}
+      <p class="cqa-faint">${esc(r.model)} · стоимость ${fmtMoney(r.cost_usd)} · время ${esc(r.latency_s)} с</p>
+    </div>`;
+  }
+
+  toggleApproved(button) {
+    const body = this.querySelector(`#${CSS.escape(button.getAttribute('aria-controls'))}`);
+    if (!body) return;
+    const opening = button.getAttribute('aria-expanded') !== 'true';
+    const height = body.getBoundingClientRect().height;
+    body._animation?.cancel();
+    button.setAttribute('aria-expanded', String(opening));
+    body.hidden = false;
+    if (matchMedia('(prefers-reduced-motion: reduce)').matches) { body.hidden = !opening; return; }
+    const animation = body.animate([{ height: `${height}px`, opacity: opening ? 0 : 1 },
+      { height: `${opening ? body.scrollHeight : 0}px`, opacity: opening ? 1 : 0 }],
+    { duration: opening ? 180 : 144, easing: 'ease-out' });
+    body._animation = animation;
+    animation.onfinish = () => { body.hidden = !opening; body._animation = null; };
+  }
 
   async tryChecklist() {
     if (this.s.trial.busy) return;
@@ -583,6 +655,8 @@ class ChecklistEditor extends CqaElement {
     else if (act === 'save') this.save();
     else if (act === 'apply') this.apply();
     else if (act === 'try') this.tryChecklist();
+    else if (act === 'check-approved') this.checkApproved();
+    else if (act === 'approved-toggle') this.toggleApproved(actEl);
   }
 
   addCriterion() {
@@ -612,6 +686,11 @@ class ChecklistEditor extends CqaElement {
   onInput(e, isChange = false) {
     const t = e.target;
     if (t.dataset.part === 'note') { this.s.note = t.value; return; }
+    if (t.dataset.f === 'approved-limit') {
+      this.s.approvedLimit = Number(t.value);
+      if (isChange) this.refreshChrome();
+      return;
+    }
     if (t.dataset.f?.startsWith('apply-')) {
       if (!isChange) return;
       if (t.dataset.f === 'apply-dataset') this.s.applyDataset = t.value;

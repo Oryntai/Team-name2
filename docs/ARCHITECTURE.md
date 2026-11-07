@@ -38,6 +38,7 @@ API организаторов (GET ?group_id=…) ─┐
 | `cqa/checklists/default.json` | начальная конфигурация (PDF организаторов) | ядро |
 | `cqa/assist.py` | черновик пояснения и замечания к критерию: один вызов существующего провайдера | сервер |
 | `cqa/sandbox.py` | проба черновика на трёх диалогах параллельно, без записи в базу | сервер |
+| `cqa/crittest.py` | сверка изменённых определений с утверждёнными ответами, отдельный журнал вызовов без записи оценок | сервер |
 | `cqa/db.py` | SQLite: схема и запросы | сервер |
 | `cqa/sources.py` | импорт из API организаторов и из файла | сервер |
 | `cqa/audio.py` | прокси записи звонка (CORS, свежая подписанная ссылка), смещение реплики в записи | сервер |
@@ -159,6 +160,8 @@ evaluations(id PK, run_id, conversation_id, checklist_id, created_at, provider, 
 run_items(run_id, pos, conversation_id, status, evaluation_id, error, previous_evaluation_id)
 appeals(id PK, evaluation_id, criterion_id, comment, created_at, status open|confirmed|changed,
         new_answer, reason, decided_at)
+criterion_test_calls(id PK, created_at, conversation_id, checklist_id, criteria JSON, provider, model,
+                     status, error, latency_s, input_tokens, output_tokens, cost_usd)
 ```
 Финальные ответы = ответы модели, поверх — решения проверяющего со статусом `changed`. Итог считается заново
 из ответов при каждом чтении (`scoring.score`), в `evaluations.total` — исходный итог для списка.
@@ -192,6 +195,8 @@ appeals(id PK, evaluation_id, criterion_id, comment, created_at, status open|con
 | `POST /api/checklists/validate` | `{"config"}` | `{"ok","errors"}` |
 | `POST /api/checklists/assist` | `{"config": <весь чек-лист>, "criterion_id": "05", "provider"?: "haiku"}` | `{"guidance": str, "warnings": [str], "na_when_suggestion": str \| null, "model": str, "cost_usd": number, "latency_s": number}` |
 | `POST /api/checklists/try` | `{"config": <весь чек-лист>, "conversation_ids"?: [...], "provider"?, "criteria"?: [...]}` | `{"provider","model","items": [{"id","language","channel","criteria": [{"id","title","answer","explanation","evidence": [1,2],"previous_answer": str\|null}]}],"cost_usd","latency_s"}`; без записи |
+| `POST /api/checklists/check-approved` | `{"config", "criteria"?: [...], "limit"?: 12, "provider"?}` | `{"provider","model","checklist_id","criteria","conversation_ids","model_calls","message","cost_usd","latency_s"}`; ответы не сохраняются в оценки |
+| `GET /api/checklist-checks/calls` | — | журнал отдельных вызовов сверки: диалог, критерии, модель, статус, ошибка, токены, стоимость, время |
 | `GET /api/appeals` | `?status=open\|decided\|all` | `[{"id","evaluation_id","conversation_id","criterion_id","criterion_title","original_answer","explanation","evidence","evidence_replies": [{"n","timestamp","speaker","text"}],"comment","status","new_answer","reason","created_at","decided_at","total_original","total_final"}]` |
 | `POST /api/appeals` | `{"evaluation_id","criterion_id","comment"}` | `201` апелляция; `409`, если по критерию уже есть открытая |
 | `POST /api/appeals/{id}/decision` | `{"decision": "confirm"\|"change", "new_answer"?, "reason"}` | `{"appeal", "evaluation"}` (оценка уже с новым итогом) |
@@ -216,6 +221,35 @@ appeals(id PK, evaluation_id, criterion_id, comment, created_at, status open|con
 `cost_usd` — сумма стоимости вызовов, `latency_s` — общее время параллельной оценки в секундах.
 Чек-лист, прогоны и ответы не сохраняются; итог не рассчитывается. В редакторе кнопка «Проверить на 3 диалогах»
 работает с черновиком, показывает сравнение ответов, обоснования, номера реплик и ссылки на карточки.
+
+`POST /api/checklists/check-approved` сравнивает отпечатки черновика с последней сохранённой версией
+чек-листа через `incremental.fingerprints`. Вес, секция, порядок и название чек-листа модель не запускают;
+общие `rules` меняют определения всех критериев. Необязательный непустой `criteria` фильтрует изменённые
+критерии, неизменённые не добавляет. Неизвестные номера, неверный чек-лист, недоступный провайдер
+или `limit` вне 1–100 (строго целое, по умолчанию 12) — `422`.
+
+Утверждённые ответы берутся из `precedents/dev_reference.json` по номерам и типам действующих критериев
+и из рассмотренных апелляций. Последнее решение по времени и id перекрывает только свой критерий;
+подтверждение сохраняет предыдущее изменение той же оценки. Более новый машинный прогон не отменяет
+решение. Решения старых версий учитываются при совпадении отпечатка определения с действующей версией
+(в контексте модели исходной оценки). Не загруженные в базу диалоги исключаются.
+
+`limit` ограничивает общее число уникальных диалогов, а не число на каждый критерий. Выборка
+детерминированно заполняет группы ответов по очереди, начиная с наименее представленных; при нескольких
+критериях учитывает покрытие остальных групп. Если лимит меньше числа групп, все ответы представить нельзя.
+На диалог — один параллельный `judge.evaluate(..., only=[...])` только для изменённых критериев,
+у которых на этом диалоге есть утверждённый ответ, без голосования и повторных попыток.
+Утверждённые ответы и прецеденты в запрос модели не передаются.
+
+Каждый элемент `criteria` содержит `id`, `title`, `available` (утверждённых ответов в базе), `sampled`
+(взято в проверку), `matched`, `total` (успешно сверено), `disagreements` и `errors`.
+В расхождении — `conversation_id`, `approved_answer`, `answer`, `explanation`, `evidence`.
+Ошибки диалогов не входят в знаменатель `total` и показываются отдельно, в том числе если упали все вызовы
+(ответ HTTP 200 с ошибками). Нет утверждённых ответов — `message` с предложением проверки на трёх диалогах;
+нет изменённых определений — пустой `criteria` и сообщение без вызова модели.
+`cost_usd` включает также стоимость некорректных ответов модели, `latency_s` — общее время параллельных вызовов.
+Каждый вызов отдельно записывается в `criterion_test_calls`, включая ошибки и стоимость, и виден в журнале.
+Черновик, ответы и итоги не записываются в `checklists`, `evaluations`, `runs` и `run_items`.
 
 `GET /api/evaluations/{id}`:
 ```json
