@@ -9,12 +9,14 @@ import './components/card.js';
 import './components/appeals.js';
 import './components/checklist-editor.js';
 import './components/journal.js';
+import './components/ask.js';
 
 const NAV = [
   { key: 'list', href: '#/', label: 'Диалоги', icon: 'chat' },
   { key: 'appeals', href: '#/appeals', label: 'Апелляции', icon: 'gavel' },
   { key: 'checklist', href: '#/checklist', label: 'Чек-лист', icon: 'checklist' },
   { key: 'journal', href: '#/journal', label: 'Журнал', icon: 'journal' },
+  { key: 'ask', href: '#/ask', label: 'Спросить', icon: 'spark' },
 ];
 
 export function parseHash() {
@@ -99,6 +101,11 @@ class CqaApp extends CqaElement {
     } else if (head === 'journal') {
       el = document.createElement('cqa-journal');
       nav = 'journal';
+    } else if (head === 'ask') {
+      el = document.createElement('cqa-ask');
+      if (params.get('dataset')) el.setAttribute('dataset-id', params.get('dataset'));
+      if (params.get('checklist')) el.setAttribute('checklist-id', params.get('checklist'));
+      nav = 'ask';
     } else {
       el = document.createElement('cqa-conversation-list');
       if (params.get('dataset')) el.setAttribute('dataset', params.get('dataset'));
@@ -110,7 +117,7 @@ class CqaApp extends CqaElement {
     const main = this.part('main');
     main.replaceChildren(el);
     window.scrollTo(0, 0);
-    document.title = `${{ list: 'Диалоги', appeals: 'Апелляции', checklist: 'Чек-лист', journal: 'Журнал' }[nav]}${head === 'c' && id ? ` · ${id}` : ''} — CQA`;
+    document.title = `${{ list: 'Диалоги', appeals: 'Апелляции', checklist: 'Чек-лист', journal: 'Журнал', ask: 'Спросить' }[nav]}${head === 'c' && id ? ` · ${id}` : ''} — CQA`;
   }
 }
 

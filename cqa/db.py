@@ -54,6 +54,10 @@ CREATE TABLE IF NOT EXISTS translations(
 CREATE TABLE IF NOT EXISTS translation_calls(
   id INTEGER PRIMARY KEY AUTOINCREMENT, conversation_id TEXT, lang TEXT, created_at TEXT, model TEXT,
   cost_usd REAL, status TEXT, error TEXT);
+CREATE TABLE IF NOT EXISTS asks(
+  id INTEGER PRIMARY KEY AUTOINCREMENT, created_at TEXT, question TEXT, answer TEXT, refs TEXT,
+  model TEXT, cost_usd REAL DEFAULT 0, input_tokens INTEGER DEFAULT 0, output_tokens INTEGER DEFAULT 0,
+  status TEXT DEFAULT 'pending', error TEXT);
 """
 
 
@@ -101,6 +105,24 @@ class DB:
     def close(self) -> None:
         with self.lock:
             self.conn.close()
+
+    # --- вопросы по оценённым диалогам (не изменяют оценки) ---
+    def start_ask(self, question: str, model: str) -> int:
+        return self.ex("INSERT INTO asks(created_at, question, model, refs) VALUES(?,?,?,'[]')",
+                       (now(), question, model))
+
+    def finish_ask(self, ask_id: int, answer: str, refs: list, model: str, cost_usd: float,
+                   input_tokens: int, output_tokens: int, error: str | None = None) -> None:
+        self.ex("UPDATE asks SET answer=?, refs=?, model=?, cost_usd=?, input_tokens=?, output_tokens=?, "
+                "status=?, error=? WHERE id=?",
+                (answer, json.dumps(refs, ensure_ascii=False), model, cost_usd, input_tokens, output_tokens,
+                 "error" if error else "ok", error, ask_id))
+
+    def list_asks(self) -> list[dict]:
+        rows = self.q("SELECT * FROM asks ORDER BY id DESC")
+        for r in rows:
+            r["refs"] = _json(r["refs"], [])
+        return rows
 
     # --- низкий уровень ---
     def q(self, sql: str, args=()) -> list[dict]:

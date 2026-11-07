@@ -25,7 +25,7 @@ from pydantic import BaseModel, Field
 from starlette.background import BackgroundTask
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from . import assist, audio, callmetrics, insights, judge, pii, sandbox, sources, translate
+from . import ask, assist, audio, callmetrics, insights, judge, pii, sandbox, sources, translate
 from .checklist import allowed_answers, normalize, validate
 from .db import DB
 from .judge.providers import env as read_env
@@ -81,6 +81,12 @@ class AssistIn(BaseModel):
     config: dict
     criterion_id: str
     provider: str | None = None
+
+
+class AskIn(BaseModel):
+    question: str = Field(min_length=1, max_length=4000, strict=True)
+    dataset_id: str | None = Field(default=None, min_length=1)
+    checklist_id: int | None = Field(default=None, gt=0, strict=True)
 
 
 class TryIn(BaseModel):
@@ -329,6 +335,32 @@ def create_app(db_path: str | os.PathLike | None = None, *, web_dir: str | os.Pa
         return p if p.is_file() else None
 
     # ---------- маршруты ----------
+    @app.post("/api/ask")
+    async def ask_question(body: AskIn):
+        question = body.question.strip()
+        if not question:
+            _fail(422, "Напишите вопрос.")
+        if body.dataset_id is not None and not db.one("SELECT id FROM datasets WHERE id=?", (body.dataset_id,)):
+            _fail(422, "Набор не найден.")
+        if body.checklist_id is not None and not checklist(body.checklist_id):
+            _fail(422, "Чек-лист не найден.")
+        context = ask.build_context(db, body.dataset_id, body.checklist_id)
+        if not context["conversations"]:
+            return await ask.answer_question(db, question, context, None)
+        # Ask всегда использует Haiku; fake включается только явно для тестов.
+        pid = "fake" if allow_fake and default_provider() == "fake" else "haiku"
+        if not judge.available(pid):
+            _fail(422, "Модель недоступна: проверьте настройки провайдера.")
+        try:
+            provider = ask.FakeAskProvider() if pid == "fake" else judge.get_provider(pid)
+            return await ask.answer_question(db, question, context, provider)
+        except judge.ProviderError as e:
+            _fail(502, str(e))
+
+    @app.get("/api/asks")
+    async def asks():
+        return db.list_asks()
+
     @app.get("/api/meta")
     async def meta():
         return {"providers": [{"id": pid, "label": judge.PROVIDERS[pid]["label"], "model": judge.model_name(pid),
