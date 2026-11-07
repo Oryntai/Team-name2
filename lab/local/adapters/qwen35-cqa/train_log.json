@@ -1,0 +1,157 @@
+{
+ "versions": {
+  "torch": "2.15.0+cu132",
+  "transformers": "5.22.2"
+ },
+ "model_class": "AutoModelForCausalLM → Qwen3_5ForCausalLM",
+ "data": {
+  "n": 796,
+  "skipped_long": 0,
+  "len_median": 3973,
+  "len_max": 4709,
+  "tokens": 3076779
+ },
+ "trainable_params": 29097984,
+ "dropped_args": [],
+ "train": {
+  "loss": 0.46921070575714113,
+  "runtime_s": 2580,
+  "history": [
+   {
+    "loss": 0.7990284442901612,
+    "learning_rate": 8e-05,
+    "epoch": 0.10050251256281408,
+    "step": 5
+   },
+   {
+    "loss": 0.6543783187866211,
+    "learning_rate": 9.956320346634876e-05,
+    "epoch": 0.20100502512562815,
+    "step": 10
+   },
+   {
+    "loss": 0.6001343250274658,
+    "learning_rate": 9.780178907671789e-05,
+    "epoch": 0.3015075376884422,
+    "step": 15
+   },
+   {
+    "loss": 0.5163442611694335,
+    "learning_rate": 9.473646649103818e-05,
+    "epoch": 0.4020100502512563,
+    "step": 20
+   },
+   {
+    "loss": 0.5130841732025146,
+    "learning_rate": 9.045084971874738e-05,
+    "epoch": 0.5025125628140703,
+    "step": 25
+   },
+   {
+    "loss": 0.49674558639526367,
+    "learning_rate": 8.506183921362443e-05,
+    "epoch": 0.6030150753768844,
+    "step": 30
+   },
+   {
+    "loss": 0.48306097984313967,
+    "learning_rate": 7.871643313414718e-05,
+    "epoch": 0.7035175879396985,
+    "step": 35
+   },
+   {
+    "loss": 0.46660938262939455,
+    "learning_rate": 7.158771761692464e-05,
+    "epoch": 0.8040201005025126,
+    "step": 40
+   },
+   {
+    "loss": 0.45028247833251955,
+    "learning_rate": 6.387014543809223e-05,
+    "epoch": 0.9045226130653267,
+    "step": 45
+   },
+   {
+    "loss": 0.4513901710510254,
+    "learning_rate": 5.577423184847932e-05,
+    "epoch": 1.0,
+    "step": 50
+   },
+   {
+    "loss": 0.38193135261535643,
+    "learning_rate": 4.7520812266338885e-05,
+    "epoch": 1.100502512562814,
+    "step": 55
+   },
+   {
+    "loss": 0.4069631099700928,
+    "learning_rate": 3.933501846281267e-05,
+    "epoch": 1.2010050251256281,
+    "step": 60
+   },
+   {
+    "loss": 0.4286377429962158,
+    "learning_rate": 3.144013755408895e-05,
+    "epoch": 1.3015075376884422,
+    "step": 65
+   },
+   {
+    "loss": 0.39181573390960694,
+    "learning_rate": 2.405152131093926e-05,
+    "epoch": 1.4020100502512562,
+    "step": 70
+   },
+   {
+    "loss": 0.4044693946838379,
+    "learning_rate": 1.7370711923791567e-05,
+    "epoch": 1.5025125628140703,
+    "step": 75
+   },
+   {
+    "loss": 0.3911348104476929,
+    "learning_rate": 1.157994445715706e-05,
+    "epoch": 1.6030150753768844,
+    "step": 80
+   },
+   {
+    "loss": 0.3850992441177368,
+    "learning_rate": 6.837175952121306e-06,
+    "epoch": 1.7035175879396984,
+    "step": 85
+   },
+   {
+    "loss": 0.3864147424697876,
+    "learning_rate": 3.271776770026963e-06,
+    "epoch": 1.8040201005025125,
+    "step": 90
+   },
+   {
+    "loss": 0.38652758598327636,
+    "learning_rate": 9.810017062595322e-07,
+    "epoch": 1.9045226130653266,
+    "step": 95
+   },
+   {
+    "loss": 0.3901622772216797,
+    "learning_rate": 2.7337132953697554e-08,
+    "epoch": 2.0,
+    "step": 100
+   }
+  ]
+ },
+ "convert": {
+  "rc": 0,
+  "tail": "O:hf-to-gguf:blk.7.ffn_down.weight.lora_b,         torch.float32 --> F16, shape = {16, 4096}\nINFO:hf-to-gguf:blk.7.ffn_gate.weight.lora_a,         torch.float32 --> F16, shape = {4096, 16}\nINFO:hf-to-gguf:blk.7.ffn_gate.weight.lora_b,         torch.float32 --> F16, shape = {16, 12288}\nINFO:hf-to-gguf:blk.7.ffn_up.weight.lora_a,           torch.float32 --> F16, shape = {4096, 16}\nINFO:hf-to-gguf:blk.7.ffn_up.weight.lora_b,           torch.float32 --> F16, shape = {16, 12288}\nINFO:hf-to-gguf:blk.7.attn_k.weight.lora_a,           torch.float32 --> F16, shape = {4096, 16}\nINFO:hf-to-gguf:blk.7.attn_k.weight.lora_b,           torch.float32 --> F16, shape = {16, 1024}\nINFO:hf-to-gguf:blk.7.attn_output.weight.lora_a,      torch.float32 --> F16, shape = {4096, 16}\nINFO:hf-to-gguf:blk.7.attn_output.weight.lora_b,      torch.float32 --> F16, shape = {16, 4096}\nINFO:hf-to-gguf:blk.7.attn_q.weight.lora_a,           torch.float32 --> F16, shape = {4096, 16}\nINFO:hf-to-gguf:blk.7.attn_q.weight.lora_b,           torch.float32 --> F16, shape = {16, 8192}\nINFO:hf-to-gguf:blk.7.attn_v.weight.lora_a,           torch.float32 --> F16, shape = {4096, 16}\nINFO:hf-to-gguf:blk.7.attn_v.weight.lora_b,           torch.float32 --> F16, shape = {16, 1024}\nINFO:hf-to-gguf:blk.8.ffn_down.weight.lora_a,         torch.float32 --> F16, shape = {12288, 16}\nINFO:hf-to-gguf:blk.8.ffn_down.weight.lora_b,         torch.float32 --> F16, shape = {16, 4096}\nINFO:hf-to-gguf:blk.8.ffn_gate.weight.lora_a,         torch.float32 --> F16, shape = {4096, 16}\nINFO:hf-to-gguf:blk.8.ffn_gate.weight.lora_b,         torch.float32 --> F16, shape = {16, 12288}\nINFO:hf-to-gguf:blk.8.ffn_up.weight.lora_a,           torch.float32 --> F16, shape = {4096, 16}\nINFO:hf-to-gguf:blk.8.ffn_up.weight.lora_b,           torch.float32 --> F16, shape = {16, 12288}\nINFO:hf-to-gguf:blk.9.ffn_down.weight.lora_a,         torch.float32 --> F16, shape = {12288, 16}\nINFO:hf-to-gguf:blk.9.ffn_down.weight.lora_b,         torch.float32 --> F16, shape = {16, 4096}\nINFO:hf-to-gguf:blk.9.ffn_gate.weight.lora_a,         torch.float32 --> F16, shape = {4096, 16}\nINFO:hf-to-gguf:blk.9.ffn_gate.weight.lora_b,         torch.float32 --> F16, shape = {16, 12288}\nINFO:hf-to-gguf:blk.9.ffn_up.weight.lora_a,           torch.float32 --> F16, shape = {4096, 16}\nINFO:hf-to-gguf:blk.9.ffn_up.weight.lora_b,           torch.float32 --> F16, shape = {16, 12288}\nINFO:hf-to-gguf:Set meta model\nINFO:hf-to-gguf:Set model parameters\nINFO:hf-to-gguf:Set model quantization version\nINFO:hf-to-gguf:Set model tokenizer\nINFO:gguf.gguf_writer:Writing the following files:\nINFO:gguf.gguf_writer:/tmp/adapter.gguf: n_tensors = 256, total_size = 58.2M\n\nWriting:   0%|          | 0.00/58.2M [00:00<?, ?byte/s]\nWriting:  42%|████▏     | 24.6M/58.2M [00:00<00:00, 245Mbyte/s]\nWriting:  85%|████████▍ | 49.3M/58.2M [00:00<00:00, 241Mbyte/s]\nWriting: 100%|██████████| 58.2M/58.2M [00:00<00:00, 242Mbyte/s]\nINFO:lora-to-gguf:Model successfully exported to /tmp/adapter.gguf\n"
+ },
+ "wall_s": 2612,
+ "cfg": {
+  "epochs": 2.0,
+  "lr": 0.0001,
+  "r": 16,
+  "alpha": 32,
+  "grad_accum": 16,
+  "max_len": 6144
+ },
+ "source": "lab/local/data/train_qwen35b.jsonl",
+ "wall_local_s": 2686
+}

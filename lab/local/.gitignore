@@ -1,0 +1,12 @@
+# синтетика и метки учителя — в git (корневой .gitignore режет любую data/, здесь возвращаем)
+!data/
+# производное и тяжёлое — не в git
+data/train_*.jsonl
+data/batch_*.json
+data/batch_state.json
+data/.spend.lock
+adapters/smoke/
+adapters/*/adapter_model.safetensors
+adapters/*/README.md
+# GGUF в git только у выбранного адаптера (qwen35-cqa); у попыток — журналы и настройки
+adapters/qwen35-cqa-r*/adapter.gguf
