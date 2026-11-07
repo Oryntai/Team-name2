@@ -179,6 +179,24 @@ class FakeProvider:
         self.pid, self.model = pid, "fake"
 
     async def complete(self, system: str, user: str, schema: dict, max_tokens: int = 0) -> Reply:
+        if "guidance" in schema["properties"]:
+            c = json.loads(user.split("\nЦелевой критерий:\n", 1)[1])
+            warnings = []
+            if c.get("na") and not c.get("na_when"):
+                warnings.append("N/A разрешён, но условие его применения не задано.")
+            if not c.get("na") and c.get("na_when"):
+                warnings.append("Условие N/A задано, но N/A не разрешён.")
+            na = ("Сначала проверьте указанное условие N/A; применяйте N/A только при его выполнении. "
+                  if c.get("na") and c.get("na_when") else "N/A не применяйте без явно разрешающего условия. ")
+            decision = ("Сопоставьте наблюдаемые действия с описаниями ступеней; верхнюю выбирайте только при полном соответствии, соседние различайте по указанным признакам. "
+                        if c.get("type") == "scale" else
+                        "Ставьте «Да», если подтверждено описанное нарушение, иначе «Нет». " if c.get("type") == "flag" else
+                        "Ставьте «Да» при выполнении сформулированного требования, иначе «Нет». ")
+            out = {"guidance": na + decision + "Ищите доказательства в репликах оператора; бот и системные события дают только контекст. "
+                   "Не добавляйте требований и не учитывайте повторно нарушения из других критериев, кроме отметки грубых ошибок.",
+                   "warnings": warnings, "na_when_suggestion": None}
+            return Reply(text=json.dumps(out, ensure_ascii=False), model="fake",
+                         input_tokens=len(system) + len(user), output_tokens=200, stop="end_turn")
         crit = schema["properties"]["criteria"]["properties"]
         out = {cid: {"explanation": f"Тестовый ответ заглушки по критерию {cid} [1].",
                      "answer": spec["properties"]["answer"]["enum"][0], "evidence": [1]} for cid, spec in crit.items()}

@@ -23,7 +23,7 @@ from pydantic import BaseModel
 from starlette.background import BackgroundTask
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from . import audio, judge, pii, sources
+from . import assist, audio, judge, pii, sources
 from .checklist import allowed_answers, normalize, validate
 from .db import DB
 from .judge.providers import env as read_env
@@ -65,6 +65,12 @@ class ChecklistIn(BaseModel):
 
 class ValidateIn(BaseModel):
     config: dict
+
+
+class AssistIn(BaseModel):
+    config: dict
+    criterion_id: str
+    provider: str | None = None
 
 
 class AppealIn(BaseModel):
@@ -469,6 +475,22 @@ def create_app(db_path: str | os.PathLike | None = None, *, web_dir: str | os.Pa
     async def checklist_validate(body: ValidateIn):
         errs = validate(normalize(body.config))
         return {"ok": not errs, "errors": errs}
+
+    @app.post("/api/checklists/assist")
+    async def checklist_assist(body: AssistIn):
+        try:
+            assist.build_user(body.config, body.criterion_id)
+        except ValueError as e:
+            _fail(422, str(e))
+        pid = body.provider or default_provider()
+        if pid not in visible_providers():
+            _fail(422, f"Неизвестная модель «{pid}».")
+        if not judge.available(pid):
+            _fail(422, "Модель недоступна: проверьте настройки провайдера.")
+        try:
+            return await assist.draft_guidance(body.config, body.criterion_id, judge.get_provider(pid))
+        except judge.ProviderError as e:
+            _fail(502, str(e))
 
     @app.post("/api/checklists", status_code=201)
     async def checklist_create(body: ChecklistIn):

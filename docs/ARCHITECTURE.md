@@ -35,6 +35,7 @@ API организаторов (GET ?group_id=…) ─┐
 | `cqa/pii.py` | маскировка личных данных перед моделью | ядро |
 | `cqa/judge/` | промпт и JSON-схема из чек-листа, провайдеры моделей, `evaluate()` | ядро |
 | `cqa/checklists/default.json` | начальная конфигурация (PDF организаторов) | ядро |
+| `cqa/assist.py` | черновик пояснения и замечания к критерию: один вызов существующего провайдера | сервер |
 | `cqa/db.py` | SQLite: схема и запросы | сервер |
 | `cqa/sources.py` | импорт из API организаторов и из файла | сервер |
 | `cqa/audio.py` | прокси записи звонка (CORS, свежая подписанная ссылка), смещение реплики в записи | сервер |
@@ -135,10 +136,17 @@ appeals(id PK, evaluation_id, criterion_id, comment, created_at, status open|con
 | `GET /api/checklists/{id}` | — | `{"id","name","version","parent_id","note","created_at","config"}` |
 | `POST /api/checklists` | `{"config","note","parent_id"}` | `201 {"id","version"}` или `422 {"errors": [...]}` |
 | `POST /api/checklists/validate` | `{"config"}` | `{"ok","errors"}` |
+| `POST /api/checklists/assist` | `{"config": <весь чек-лист>, "criterion_id": "05", "provider"?: "haiku"}` | `{"guidance": str, "warnings": [str], "na_when_suggestion": str \| null, "model": str, "cost_usd": number, "latency_s": number}` |
 | `GET /api/appeals` | `?status=open\|decided\|all` | `[{"id","evaluation_id","conversation_id","criterion_id","criterion_title","original_answer","explanation","evidence","evidence_replies": [{"n","timestamp","speaker","text"}],"comment","status","new_answer","reason","created_at","decided_at","total_original","total_final"}]` |
 | `POST /api/appeals` | `{"evaluation_id","criterion_id","comment"}` | `201` апелляция; `409`, если по критерию уже есть открытая |
 | `POST /api/appeals/{id}/decision` | `{"decision": "confirm"\|"change", "new_answer"?, "reason"}` | `{"appeal", "evaluation"}` (оценка уже с новым итогом) |
 | `GET /api/audio/{conversation_id}` | заголовок `Range` | `audio/mpeg` (206 при Range) |
+
+`POST /api/checklists/assist` принимает несохранённый черновик, включая проблемы формулировок (например, N/A без условия).
+В модель передаются все критерии и общие правила, целевой критерий выделяется отдельно; ответ проверяется по строгой схеме.
+Без `provider` используется модель из настроек (по умолчанию Haiku). Неизвестный номер критерия, неверная структура
+или недоступный провайдер — `422`; ошибка провайдера или некорректный ответ модели — `502`; формат ошибок — `{"detail", "errors"}`.
+Подсказка ничего не сохраняет: методист вставляет пояснение или заменяет условие N/A в редакторе и сохраняет новую версию обычной кнопкой.
 
 `GET /api/evaluations/{id}`:
 ```json

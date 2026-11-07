@@ -262,6 +262,21 @@ export async function createMockApi() {
       return clone(c);
     },
     async validateChecklist(config) { await wait(80); const errors = validate(config); return { ok: !errors.length, errors }; },
+    async assistChecklist({ config, criterion_id }) {
+      await wait(650);
+      const c = config?.criteria?.find((x) => x.id === criterion_id);
+      if (!c) {
+        const detail = `В чек-листе нет критерия ${criterion_id}.`;
+        throw new MockError(422, detail, { detail, errors: [detail] });
+      }
+      const warnings = [];
+      if (c.na && !c.na_when?.trim()) warnings.push('N/A разрешён, но условие его применения не задано.');
+      if (!c.na && c.na_when?.trim()) warnings.push('Условие N/A задано, но N/A не разрешён.');
+      const decision = c.type === 'scale' ? 'Сравните действия оператора с описанием каждой ступени; соседние ступени различайте по перечисленным признакам.'
+        : c.type === 'flag' ? 'Ставьте «Да», если подтверждено описанное нарушение, иначе «Нет».' : 'Ставьте «Да» при выполнении сформулированного требования, иначе «Нет».';
+      return { guidance: `${c.na && c.na_when?.trim() ? 'Сначала проверьте условие N/A и применяйте N/A только при его выполнении.' : 'Не применяйте N/A без явно разрешающего условия.'} ${decision} Ищите доказательства в репликах оператора; бот и системные события дают только контекст. Не добавляйте требований и не учитывайте нарушения повторно в других критериях, кроме отметки грубых ошибок.`,
+        warnings, na_when_suggestion: null, model: 'fake', cost_usd: 0, latency_s: 0.65 };
+    },
     async saveChecklist({ config, note, parent_id }) {
       await wait(250);
       const errors = validate(config);
