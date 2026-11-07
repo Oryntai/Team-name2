@@ -61,6 +61,8 @@ function httpClient(base) {
     conversations: (params) => req('GET', `/conversations${q(params)}`),
     conversation: (id) => req('GET', `/conversations/${enc(id)}`),
     evaluation: (id) => req('GET', `/evaluations/${enc(id)}`),
+    calibrations: (params) => req('GET', `/calibrations${q(params)}`),
+    createCalibration: (body) => req('POST', '/calibrations', body),
     startRun: (body) => req('POST', '/runs', body),
     planRun: (body) => req('POST', '/runs/plan', body),
     runDiff: (id) => req('GET', `/runs/${enc(id)}/diff`),

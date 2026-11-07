@@ -13,7 +13,8 @@ class Card extends CqaElement {
   init() {
     this.convId = this.getAttribute('conversation-id');
     this.evalId = this.getAttribute('evaluation-id');
-    this.s = { conv: null, ev: null, cfg: null, meta: null, checklists: [], evals: [], appealFor: null, active: null, rerunOpen: false, run: null, pop: null, thinkingTab: 0 };
+    this.s = { conv: null, ev: null, cfg: null, meta: null, checklists: [], evals: [], appealFor: null, active: null, rerunOpen: false, run: null, pop: null, thinkingTab: 0,
+      blind: false, calAnswers: {}, comparison: null, calBusy: false };
     this.innerHTML = '<div class="cqa-loading"><span class="cqa-spinner cqa-spinner--lg"></span>Открываю диалог…</div>';
     this.addEventListener('click', (e) => this.onClick(e));
     this.addEventListener('submit', (e) => this.onSubmit(e));
@@ -73,7 +74,7 @@ class Card extends CqaElement {
     const { conv } = this.s;
     const call = isCall(conv.channel);
     const n = conv.transcript?.length || 0;
-    const evOpts = this.s.evals.length > 1
+    const evOpts = !this.s.blind && this.s.evals.length > 1
       ? `<label class="cqa-inline-field"><span class="cqa-label">Оценка</span><select class="cqa-select cqa-select--sm" data-f="eval">${this.s.evals.map((e) => `<option value="${e.evaluation_id}" ${e.evaluation_id === this.s.ev?.id ? 'selected' : ''}>${esc(shortLabel(e.checklist_label))} · ${esc(providerLabel(this.s.meta, e.provider, e.model))} · ${esc(fmtDateTime(e.created_at))}${e.final_total != null || e.total != null ? ` · ${fmtScore(e.final_total ?? e.total)}` : ''}</option>`).join('')}</select></label>`
       : '';
     this.innerHTML = `
@@ -90,7 +91,8 @@ class Card extends CqaElement {
         </div>
         <div class="cqa-card-actions">
           ${evOpts}
-          <button type="button" class="cqa-btn" data-act="rerun-toggle" aria-expanded="${this.s.rerunOpen}">${icon('refresh')}Переоценить</button>
+          ${this.s.blind ? '' : `<span title="${this.calibrationReady() ? 'Ответы ИИ будут скрыты до сравнения' : 'Нужна успешная оценка ИИ по выбранному чек-листу'}"><button type="button" class="cqa-btn" data-act="cal-start" ${this.calibrationReady() ? '' : 'disabled'}>${icon('edit')}Оценить вслепую</button></span>
+          <button type="button" class="cqa-btn" data-act="rerun-toggle" aria-expanded="${this.s.rerunOpen}">${icon('refresh')}Переоценить</button>`}
         </div>
       </div>
       <div data-part="rerun">${this.s.rerunOpen ? this.rerunHtml() : ''}</div>
@@ -189,7 +191,107 @@ class Card extends CqaElement {
   }
 
   resultsHtml() {
+    if (this.s.blind) return this.calibrationHtml();
+    if (this.s.comparison) return this.comparisonHtml();
     return this.callMetricsHtml() + this.evaluationHtml();
+  }
+
+  calibrationReady() {
+    return this.s.ev?.status === 'ok' && !!this.s.ev.original && !!this.s.cfg;
+  }
+
+  calibrationHtml() {
+    const cfg = this.s.cfg;
+    const count = Object.keys(this.s.calAnswers).length;
+    return `<form data-form="calibration" class="cqa-calibration">
+      <div class="cqa-row"><h2>Оценка вслепую</h2><span class="cqa-spacer"></span><button type="button" class="cqa-btn cqa-btn--ghost cqa-btn--sm" data-act="cal-close">Отмена</button></div>
+      <p class="cqa-muted">${esc(this.s.ev.checklist.label)} · <span data-part="cal-count">${count} из ${cfg.criteria.length}</span></p>
+      ${cfg.rules?.length ? `<details class="cqa-details"><summary>${icon('info')}Правила</summary><ul>${cfg.rules.map((r) => `<li>${esc(r)}</li>`).join('')}</ul></details>` : ''}
+      ${cfg.criteria.map((c) => {
+        const allowed = this.s.ev.criteria.find((x) => x.id === c.id)?.allowed || [];
+        const value = this.s.calAnswers[c.id];
+        return `<div class="cqa-calibration-question">
+          <details class="cqa-details"><summary><span class="cqa-crit-id">${esc(c.id)}</span>${esc(c.title)}</summary>
+            <div class="cqa-calibration-definition">
+              <p>${c.type === 'scale' ? '' : '<b>Да: </b>'}${esc(c.yes)}</p>
+              ${c.no ? `<p><b>Нет: </b>${esc(c.no)}</p>` : ''}
+              ${(c.steps || []).map((s) => `<p><b>${esc(s.value)}: </b>${esc(s.text)}</p>`).join('')}
+              ${c.na ? `<p><b>N/A: </b>${esc(c.na_when)}</p>` : ''}
+              ${c.guidance ? `<p>${esc(c.guidance)}</p>` : ''}
+            </div>
+          </details>
+          <select class="cqa-select cqa-select--sm" data-cal-criterion="${esc(c.id)}" aria-label="Ответ: ${esc(c.title)}">
+            <option value="" disabled ${value == null ? 'selected' : ''}>Ваш ответ</option>
+            ${allowed.map((a) => `<option value="${esc(a)}" ${a === value ? 'selected' : ''}>${esc(a)}</option>`).join('')}
+          </select>
+        </div>`;
+      }).join('')}
+      <details class="cqa-details cqa-calibration-signature"><summary>${icon('edit')}Подпись и комментарий</summary><div>
+        <label class="cqa-field"><span class="cqa-label">Имя</span><input class="cqa-input" name="reviewer" maxlength="200" autocomplete="name"></label>
+        <label class="cqa-field"><span class="cqa-label">Комментарий</span><textarea class="cqa-textarea" name="comment" maxlength="5000"></textarea></label>
+      </div></details>
+      <button type="submit" class="cqa-btn cqa-btn--primary" data-part="cal-submit" ${count === cfg.criteria.length ? '' : 'disabled'}>Сравнить с ИИ</button>
+    </form>`;
+  }
+
+  comparisonHtml() {
+    const result = this.s.comparison;
+    const matched = result.criteria.filter((c) => c.matched).length;
+    const n = this.s.conv.transcript?.length || 0;
+    return `<div class="cqa-calibration" aria-live="polite">
+      <div class="cqa-row"><h2>Ваш ${fmtScore(result.human.total)} · ИИ ${fmtScore(result.model.total)}</h2><span class="cqa-spacer"></span><button type="button" class="cqa-btn cqa-btn--ghost cqa-btn--sm" data-act="cal-close">К оценке</button></div>
+      <p class="cqa-muted">Совпало ${matched} из ${result.criteria.length} · ИИ №${result.evaluation_id} · сохранено${result.reviewer ? ` · ${esc(result.reviewer)}` : ''}</p>
+      ${result.human.gross || result.model.gross ? `<p class="cqa-muted">Грубая ошибка: вы — ${result.human.gross ? 'Да' : 'Нет'} · ИИ — ${result.model.gross ? 'Да' : 'Нет'}</p>` : ''}
+      <div class="cqa-calibration-table"><table class="cqa-table"><thead><tr><th>Критерий</th><th>Ваш</th><th>ИИ</th><th aria-label="Совпало">=</th></tr></thead>
+        <tbody>${result.criteria.map((c) => `<tr><td>${c.matched ? `${esc(c.id)} · ${esc(c.title)}` : `<details class="cqa-details"><summary>${esc(c.id)} · ${esc(c.title)}</summary><div class="cqa-calibration-definition"><p>${linkifyRefs(c.explanation, n)}</p><div class="cqa-crit-ev">${this.chipsHtml(c.evidence)}</div></div></details>`}</td>
+          <td>${esc(c.human_answer)}</td><td>${esc(c.model_answer)}</td><td class="cqa-calibration-match" data-matched="${c.matched}" aria-label="${c.matched ? 'Совпало' : 'Не совпало'}">${icon(c.matched ? 'check' : 'x')}</td></tr>`).join('')}</tbody>
+      </table></div>
+    </div>`;
+  }
+
+  startCalibration() {
+    if (!this.calibrationReady()) return;
+    this.closePop();
+    this.s.blind = true;
+    this.s.calAnswers = {};
+    this.s.comparison = null;
+    this.s.rerunOpen = false;
+    this.render();
+    this.part('results')?.scrollTo(0, 0);
+  }
+
+  toggleCalibrationDetails(details) {
+    const body = details.lastElementChild;
+    const opening = !details.open || details.dataset.closing === '1';
+    details._calAnimation?.cancel();
+    details.dataset.closing = opening ? '0' : '1';
+    if (matchMedia('(prefers-reduced-motion: reduce)').matches) { details.open = opening; return; }
+    details.open = true;
+    const frames = [{ opacity: 0, transform: 'translateY(-3px)' }, { opacity: 1, transform: 'none' }];
+    const animation = body.animate(opening ? frames : [...frames].reverse(), {
+      duration: opening ? 180 : 144, easing: 'cubic-bezier(.16, 1, .3, 1)',
+    });
+    details._calAnimation = animation;
+    animation.finished.then(() => { if (!opening) details.open = false; }).catch(() => {});
+  }
+
+  async submitCalibration(form) {
+    if (this.s.calBusy || Object.keys(this.s.calAnswers).length !== this.s.cfg.criteria.length) return;
+    const data = new FormData(form);
+    this.s.calBusy = true;
+    form.querySelectorAll('button, select, input, textarea').forEach((el) => { el.disabled = true; });
+    try {
+      const result = await this.api.createCalibration({ conversation_id: this.convId, checklist_id: this.s.ev.checklist.id,
+        answers: this.s.calAnswers, reviewer: data.get('reviewer'), comment: data.get('comment') });
+      if (!this.alive) return;
+      this.s.blind = false;
+      this.s.comparison = result;
+      this.render();
+    } catch (e) {
+      if (!this.alive) return;
+      form.querySelectorAll('button, select, input, textarea').forEach((el) => { el.disabled = false; });
+      toast(`Не удалось сохранить: ${e.message}`, 'error');
+    } finally { this.s.calBusy = false; }
   }
 
   callMetricsHtml() {
@@ -383,6 +485,7 @@ class Card extends CqaElement {
 
   renderMarkers() {
     this.querySelectorAll('.cqa-mark-row').forEach((el) => el.remove());
+    if (this.s.blind || this.s.comparison) return;
     const crits = this.s.ev?.status === 'ok' ? (this.s.ev.criteria || []) : [];
     const by = new Map();
     for (const c of crits) {
@@ -547,7 +650,7 @@ class Card extends CqaElement {
 
   highlight(cid) {
     this.querySelectorAll('.cqa-transcript .is-evidence').forEach((e) => { e.classList.remove('is-evidence'); e.style.removeProperty('--cqa-ev'); });
-    if (!cid || !this.s.ev) return;
+    if (this.s.blind || this.s.comparison || !cid || !this.s.ev) return;
     const c = (this.s.ev.criteria || []).find((x) => x.id === cid);
     if (!c) return;
     const def = this.critDef(cid);
@@ -569,6 +672,8 @@ class Card extends CqaElement {
   /* ---------- события ---------- */
   onClick(e) {
     const t = e.target;
+    const calSummary = t.closest('.cqa-calibration details > summary');
+    if (calSummary) { e.preventDefault(); this.toggleCalibrationDetails(calSummary.parentElement); return; }
     if (this.s.pop && !t.closest('.cqa-pop, .cqa-mark, .cqa-crit')) this.closePop();
     const mark = t.closest('.cqa-mark');
     if (mark) {
@@ -595,7 +700,9 @@ class Card extends CqaElement {
     const act = t.closest('[data-act]');
     if (act) {
       const a = act.dataset.act;
-      if (a === 'pop-close') this.closePop();
+      if (a === 'cal-start') this.startCalibration();
+      else if (a === 'cal-close') { if (!this.s.calBusy) { this.s.blind = false; this.s.comparison = null; this.render(); } }
+      else if (a === 'pop-close') this.closePop();
       else if (a === 'thinking-open' || a === 'thinking-tab') {
         if (a === 'thinking-tab') this.s.thinkingTab = +act.dataset.i; else this.s.thinkingTab = 0;
         let d = this.part('thinking-dialog');
@@ -626,17 +733,25 @@ class Card extends CqaElement {
 
   onChange(e) {
     const t = e.target;
+    if (t.dataset.calCriterion && this.s.blind) {
+      this.s.calAnswers[t.dataset.calCriterion] = t.value;
+      const count = Object.keys(this.s.calAnswers).length;
+      this.part('cal-count').textContent = `${count} из ${this.s.cfg.criteria.length}`;
+      this.part('cal-submit').disabled = count !== this.s.cfg.criteria.length;
+    }
     if (t.dataset.f === 'eval') this.openEval(t.value);
   }
 
   /** Открыть другую оценку: в приложении — через адрес (#/c/…?e=…), во встроенном виде — на месте. */
   openEval(id) {
+    this.s.blind = false; this.s.comparison = null;
     if (this.hasAttribute('embedded')) { this.evalId = String(id); this.s.run = null; this.s.rerunOpen = false; this.load(); }
     else navigate(`#/c/${encodeURIComponent(this.convId)}?e=${encodeURIComponent(id)}`);
   }
 
   async onSubmit(e) {
     const f = e.target;
+    if (f.dataset.form === 'calibration') { e.preventDefault(); await this.submitCalibration(f); return; }
     if (f.dataset.form !== 'appeal') return;
     e.preventDefault();
     const comment = String(new FormData(f).get('comment') || '').trim();

@@ -24,7 +24,7 @@ from pydantic import BaseModel, Field
 from starlette.background import BackgroundTask
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from . import assist, audio, callmetrics, judge, pii, sandbox, sources
+from . import assist, audio, calibrations, callmetrics, judge, pii, sandbox, sources
 from .checklist import allowed_answers, normalize, validate
 from .db import DB
 from .judge.providers import env as read_env
@@ -88,6 +88,15 @@ class AppealIn(BaseModel):
     evaluation_id: int
     criterion_id: str
     comment: str | None = ""
+
+
+class CalibrationIn(BaseModel):
+    model_config = {"extra": "forbid"}
+    conversation_id: str
+    checklist_id: int | None = Field(default=None, ge=1, strict=True)
+    reviewer: str | None = Field(default="", max_length=200)
+    answers: dict[str, str]
+    comment: str | None = Field(default="", max_length=5000)
 
 
 class DecisionIn(BaseModel):
@@ -419,6 +428,37 @@ def create_app(db_path: str | os.PathLike | None = None, *, web_dir: str | os.Pa
         if not ev:
             _fail(404, f"Оценка {ev_id} не найдена.")
         return eval_detail(ev)
+
+    @app.post("/api/calibrations", status_code=201)
+    async def create_calibration(body: CalibrationIn):
+        if not db.conversation(body.conversation_id):
+            _fail(404, "Диалог не найден.")
+        if body.checklist_id is not None and not checklist(body.checklist_id):
+            _fail(422, "Чек-лист не найден.")
+        ev = db.calibration_evaluation(body.conversation_id, body.checklist_id)
+        if not ev:
+            _fail(409, "Сначала нужна успешная оценка ИИ по этому чек-листу.")
+        cfg = checklist(ev["checklist_id"])["config"]
+        expected = {c["id"] for c in cfg["criteria"]}
+        if set(body.answers) != expected:
+            _fail(422, "Ответьте на все критерии чек-листа без дополнительных критериев.")
+        for c in cfg["criteria"]:
+            if body.answers[c["id"]] not in allowed_answers(c):
+                _fail(422, f"Критерий {c['id']}: допустимо {', '.join(allowed_answers(c))}.")
+        # Проверяем сравнение до записи: неполная старая оценка не создаёт калибровку.
+        try:
+            calibrations.compare({"answers": body.answers}, ev, cfg)
+        except (ScoreError, KeyError, TypeError):
+            _fail(409, "Оценка ИИ неполная — выберите другую оценку.")
+        row = db.create_calibration(ev, body.answers, (body.reviewer or "").strip(), (body.comment or "").strip())
+        return calibrations.compare(row, ev, cfg)
+
+    @app.get("/api/calibrations")
+    async def list_calibrations(conversation_id: str | None = None, dataset_id: str | None = None):
+        items = [calibrations.compare(row, db.evaluation(row["evaluation_id"]),
+                                     checklist(row["checklist_id"])["config"])
+                 for row in db.list_calibrations(conversation_id, dataset_id)]
+        return {"items": items, "summary": calibrations.summarize(items)}
 
     def run_input(body: RunIn):
         if body.checklist_id is None:

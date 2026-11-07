@@ -42,6 +42,7 @@ API организаторов (GET ?group_id=…) ─┐
 | `cqa/sources.py` | импорт из API организаторов и из файла | сервер |
 | `cqa/audio.py` | прокси записи звонка (CORS, свежая подписанная ссылка), смещение реплики в записи | сервер |
 | `cqa/callmetrics.py` | справочные метрики звонка по ISO-меткам, без модели и влияния на итог | сервер |
+| `cqa/calibrations.py` | слепая оценка человека, сравнение с исходными ответами ИИ и сводка согласия | сервер |
 | `cqa/runner.py` | пакетные прогоны в фоне, прогресс, журнал | сервер |
 | `cqa/api.py`, `cqa/__main__.py` | FastAPI, раздача `web/` | сервер |
 | `web/` | интерфейс: HTML/CSS/JS без сборки, веб-компоненты `cqa-*` | интерфейс |
@@ -159,6 +160,7 @@ evaluations(id PK, run_id, conversation_id, checklist_id, created_at, provider, 
 run_items(run_id, pos, conversation_id, status, evaluation_id, error, previous_evaluation_id)
 appeals(id PK, evaluation_id, criterion_id, comment, created_at, status open|confirmed|changed,
         new_answer, reason, decided_at)
+calibrations(id PK, conversation_id, evaluation_id, checklist_id, reviewer, created_at, answers JSON, comment)
 ```
 Финальные ответы = ответы модели, поверх — решения проверяющего со статусом `changed`. Итог считается заново
 из ответов при каждом чтении (`scoring.score`), в `evaluations.total` — исходный итог для списка.
@@ -181,6 +183,8 @@ appeals(id PK, evaluation_id, criterion_id, comment, created_at, status open|con
 | `GET /api/conversations` | `?dataset_id=&language=&channel=` | `[{"id","dataset_id","channel","language","n_replies","duration","latest": {"evaluation_id","checklist_id","checklist_label","status","total","final_total","gross","created_at"} \| null, "appeals": {"open","decided"}}]` |
 | `GET /api/conversations/{id}` | — | `{"id","dataset_id","channel","language","audio_src" \| null, "call_metrics": object \| null, "transcript": [{"n","timestamp","speaker","text","audio_offset" \| null,"pii": [{"start","end","type","label"}]}], "evaluations": [{"evaluation_id","checklist_label","provider","model","created_at","status","total","final_total","gross"}]}` |
 | `GET /api/evaluations/{id}` | — | см. ниже |
+| `POST /api/calibrations` | `{"conversation_id", "answers": {"criterion_id": "ответ"}, "reviewer"?, "comment"?, "checklist_id"?}` | `201`: сохранённая калибровка + `criteria: [{id,title,human_answer,model_answer,matched,explanation,evidence}]`, `human/model: {total,gross}`, `delta` |
+| `GET /api/calibrations` | `?conversation_id=&dataset_id=` (фильтры совместимы) | `{"items": [сравнения], "summary": {count,criteria: [{checklist_id,id,title,matched,total}],scored_count,mean_delta,mean_absolute_delta}}` |
 | `POST /api/runs` | `{"conversation_ids"?: [...], "dataset_id"?, "checklist_id"?, "provider"?, "mode"?: "incremental"\|"full"}` | `{"run_id"}` (оценка идёт в фоне); режим по умолчанию `incremental` |
 | `POST /api/runs/plan` | те же поля, что у запуска | `{"mode","total","without_previous","model_calls","evaluated","reused","criteria": [{"id","title","evaluated","reused","definition_changed","weight_changed"}]}`; без запуска и записи |
 | `GET /api/runs/{id}` | — | `{"id","status","mode","checklist_id","checklist_label","provider","model","total","done","failed","cost_usd","model_calls","evaluated","reused","created_at","finished_at","items": [{"conversation_id","status","evaluation_id","total","gross","error"}]}` |
@@ -237,6 +241,16 @@ appeals(id PK, evaluation_id, criterion_id, comment, created_at, status open|con
  "original": {"total": 93.08, "gross": false, "sections": [{"name": "…", "points_eff": 30.77, "max_eff": 38.46, "percent": 80.0}]},
  "final": {"total": 93.08, "gross": false, "sections": ["…"]}}
 ```
+
+Калибровка берёт последнюю успешную оценку диалога по `checklist_id`; без него — последнюю успешную
+оценку любой версии. Все ответы обязательны, только строки из `allowed_answers`, лишние критерии запрещены
+(`422`). Нет диалога — `404`; нет успешной полной оценки — `409`. Сравниваются исходные ответы ИИ,
+без решений по апелляциям. Оба итога считает `scoring.score`; калибровка не меняет оценки, прогоны,
+прецеденты и выгрузку результатов, не вызывает модель. В карточке отправляется id выбранного чек-листа.
+Сохранённая калибровка закрепляет `evaluation_id`: новый прогон не меняет историю сравнения.
+Сводка разделяет критерии разных версий чек-листа. `mean_delta` — среднее «человек минус ИИ»,
+`mean_absolute_delta` — средняя абсолютная разница. Если один из итогов отсутствует, `delta=null`;
+такие записи участвуют в согласии по критериям, но исключаются из средних (`scored_count`).
 
 В плане `evaluated`, `reused`, `definition_changed`, `weight_changed` у критерия — числа диалогов.
 `definition_changed` учитывает также общие rules, версию промпта, новые критерии и отсутствие сохранённого
