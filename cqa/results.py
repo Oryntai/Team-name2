@@ -387,9 +387,14 @@ def _report(out: pathlib.Path, doc: dict, errs: list[str]) -> None:
     if not errs and not bad:
         print(f"Дальше: git add {rel} && git commit -m 'Результаты {rel.parent.name}' && git push")
     elif not errs:
-        print("Есть записи со status error — по приложению это допустимо (причина в поле error). Сбой модели — "
-              "повторите ту же команду (набор оценится заново, ~30 с); диалог не прочитан из входа — так и сдавать.")
-        print(f"Сдать: git add {rel} && git commit -m 'Результаты {rel.parent.name}' && git push")
+        model_failed = [r for r in bad if not str(r.get("error") or "").startswith("Диалог не прочитан")]
+        if model_failed:
+            print(f"Не оценено моделью: {len(model_failed)} — НЕ пушить: проверьте сеть/ключ и повторите ту же команду "
+                  "(набор оценится заново, ~30 с).")
+        else:
+            print("Записи со status error — диалоги, которые не читаются во входе: по приложению это допустимо "
+                  "(причина в поле error), так и сдавать.")
+            print(f"Сдать: git add {rel} && git commit -m 'Результаты {rel.parent.name}' && git push")
 
 
 def _warn_stale(out) -> None:
