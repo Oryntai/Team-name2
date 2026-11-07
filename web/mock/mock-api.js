@@ -11,7 +11,7 @@ const now = () => { const d = new Date(); return new Date(d.getTime() - d.getTim
 async function fingerprint(c, cfg, model) {
   const definition = {};
   for (const k of ['id', 'title', 'type', 'yes', 'no', 'na', 'na_when', 'steps', 'guidance']) definition[k] = c[k] ?? null;
-  Object.assign(definition, { rules: cfg.rules || [], prompt_version: 'p1', model });
+  Object.assign(definition, { rules: cfg.rules || [], prompt_version: 'p2', model });
   const canonical = (v) => Array.isArray(v) ? v.map(canonical) : v && typeof v === 'object'
     ? Object.fromEntries(Object.keys(v).sort().map((k) => [k, canonical(v[k])])) : v;
   const hash = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(JSON.stringify(canonical(definition))));
@@ -111,6 +111,10 @@ export async function createMockApi() {
   // Начальные выдуманные оценки считаем полными, чтобы на них можно было показать перенос.
   for (const e of st.evals) {
     e.mode = 'full'; e.evaluated = e.criteria.map((c) => c.id); e.reused = []; e.model_calls = 3;
+    e.prompt_version = 'p2';
+    e.precedents = st.evals.filter((p) => p.conversation_id !== e.conversation_id)
+      .filter((p, i, all) => all.findIndex((x) => x.conversation_id === p.conversation_id) === i).slice(0, 2)
+      .map((p, i) => ({ conversation_id: p.conversation_id, source: i === 1 ? 'reviewer' : 'reference' }));
     for (const c of e.criteria) {
       const cfg = cfgOf(e.checklist.id);
       c.fingerprint = await fingerprint(cfg.criteria.find((x) => x.id === c.id), cfg, e.model);
@@ -191,7 +195,8 @@ export async function createMockApi() {
     const calls = item.evaluated.length ? 1 : 0;
     const tin = calls * 2100, tout = item.evaluated.length * 170;
     const ev = { id, run_id: runId, conversation_id: conv.id, checklist: { id: ch.id, name: ch.name, version: ch.version, label: label(ch) },
-      provider: p.id, model: p.model, prompt_version: 'p1', mode, evaluated: item.evaluated, reused: item.reused, model_calls: calls,
+      provider: p.id, model: p.model, prompt_version: 'p2', mode, evaluated: item.evaluated, reused: item.reused, model_calls: calls,
+      precedents: [],
       created_at: now(), latency_s: calls * 8,
       input_tokens: tin, output_tokens: tout, cost_usd: +((tin * p.price_in + tout * p.price_out) / 1e6).toFixed(6), status: 'ok', error: null,
       pii_masked: (conv.transcript || []).flatMap((m) => (m.pii || []).map((s) => ({ n: m.n, type: s.type, label: s.label }))), criteria: crits };

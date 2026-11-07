@@ -11,7 +11,7 @@ import json
 import logging
 import os
 
-from . import judge
+from . import judge, precedents
 from .incremental import fingerprints, partition
 from .scoring import ScoreError, score
 from .vote import evaluate_voted
@@ -71,6 +71,7 @@ class Runner:
         tokens_in = tokens_out = 0
         model = judge.model_name(provider.pid)
         only, reused = partition(config, model, previous, mode)
+        examples = precedents.select(self.db, rec, config) if only else []
         calls = 0
         votes = self.votes if votes is None else votes
         raw_calls = []
@@ -86,14 +87,14 @@ class Runner:
                         calls += 1
                         # Всегда полный вызов: критерий оценивается в контексте всего чек-листа — отдельный вызов
                         # по критерию на DEV хуже (замер 7.11: 92,5% против 94,2%). Из ответа берём только `only`.
-                        res = await judge.evaluate(rec, config, provider)
+                        res = await judge.evaluate(rec, config, provider, precedents=examples)
                     except Exception as e:  # noqa: BLE001 — любую ошибку сохраняем в оценку, прогон идёт дальше
                         log.exception("evaluate %s", cid)
                         res = {"status": "error", "error": f"{type(e).__name__}: {e}", "answers": {},
                                "provider": provider.pid, "model": judge.model_name(provider.pid)}
             else:
                 # only фильтрует сохранение ниже; все голоса оценивают полный чек-лист.
-                res = await evaluate_voted(rec, config, provider, votes, sem=sem)
+                res = await evaluate_voted(rec, config, provider, votes, sem=sem, precedents=examples)
                 calls += res["model_calls"]
                 raw_calls.extend(json.loads(res["raw"]))
             tokens_in += res.get("input_tokens") or 0
@@ -120,6 +121,7 @@ class Runner:
             "run_id": run_id, "conversation_id": cid, "checklist_id": checklist_id,
             "provider": res.get("provider") or provider.pid, "model": res.get("model") or model,
             "mode": mode, "evaluated": only, "reused": list(reused), "model_calls": calls,
+            "precedents": [{"conversation_id": p["conversation_id"], "source": p["source"]} for p in examples],
             "prompt_version": res.get("prompt_version"), "status": status, "error": error,
             "latency_s": round(latency, 2), "input_tokens": tokens_in, "output_tokens": tokens_out,
             "cost_usd": round(cost, 6), "answers": answers, "pii_masked": res.get("pii_masked") or [],
