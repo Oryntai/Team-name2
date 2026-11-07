@@ -33,6 +33,7 @@ async def main():
     ap.add_argument("--limit", type=int, default=0, help="первые N чатов (для проверки пути)")
     ap.add_argument("--checklist", default="", help="путь к чек-листу (по умолчанию — начальный из cqa/checklists)")
     ap.add_argument("--effort", help="переопределить effort модели: low / medium / high / xhigh / max")
+    ap.add_argument("--per-criterion", action="store_true", help="каждый критерий — отдельный вызов модели (only=[id])")
     ap.add_argument("--tag", default="", help="метка прогона в имени папки")
     args = ap.parse_args()
 
@@ -48,9 +49,22 @@ async def main():
         prov.cfg = dict(prov.cfg, effort=args.effort)
     sem = asyncio.Semaphore(args.conc)
 
-    async def one(cid):
+    async def call(cid, only=None):
         async with sem:
-            return await evaluate(recs[cid], cfg, prov)
+            return await evaluate(recs[cid], cfg, prov, only=only)
+
+    async def one(cid):
+        if not args.per_criterion:
+            return await call(cid)
+        parts = await asyncio.gather(*[call(cid, [k]) for k in crit_ids])  # «точный режим»: критерий — свой вызов
+        merged = {**parts[0], "answers": {k: v for p in parts for k, v in p["answers"].items()}}
+        for f in ("input_tokens", "output_tokens", "cost_usd"):
+            merged[f] = sum(p.get(f) or 0 for p in parts)
+        merged["latency_s"] = max(p.get("latency_s") or 0 for p in parts)
+        bad = next((p for p in parts if p["status"] != "ok"), None)
+        if bad:
+            merged.update(status="error", error=bad["error"])
+        return merged
 
     t0 = time.monotonic()
     res = dict(zip(ids, await asyncio.gather(*[one(c) for c in ids])))

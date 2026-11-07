@@ -110,7 +110,7 @@ def test_one_definition_changes_only_one_answer(setup):
     p.answers["05"] = "Нет"
     ev = run(db, cl)
     assert len(p.calls) == 1
-    assert p.calls[0][2]["properties"]["criteria"]["required"] == ["05"]
+    assert len(p.calls[0][2]["properties"]["criteria"]["required"]) == 8  # полный вызов: критерий в контексте всего чек-листа
     assert ev["evaluated"] == ["05"] and len(ev["reused"]) == 7
     assert ev["answers"]["05"]["answer"] == "Нет"
     assert ev["answers"]["05"]["reused_from"] is None
@@ -163,7 +163,7 @@ def test_incremental_retries_and_counts_all_calls(setup):
     p.failures = 2
     ev = run(db, cl)
     assert ev["model_calls"] == len(p.calls) == 3
-    assert all(c[2]["properties"]["criteria"]["required"] == ["05"] for c in p.calls)
+    assert all(len(c[2]["properties"]["criteria"]["required"]) == 8 for c in p.calls)
     assert db.run_counts(ev["run_id"]) == {"model_calls": 3, "evaluated": 1, "reused": 7}
 
 

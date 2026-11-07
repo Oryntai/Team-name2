@@ -68,8 +68,9 @@ class Runner:
             async with sem:
                 try:
                     calls += 1
-                    res = (await judge.evaluate(rec, config, provider, only=only) if mode == "incremental"
-                           else await judge.evaluate(rec, config, provider))
+                    # Всегда полный вызов: критерий оценивается в контексте всего чек-листа — отдельный вызов
+                    # по критерию на DEV хуже (замер 7.11: 92,5% против 94,2%). Из ответа берём только `only`.
+                    res = await judge.evaluate(rec, config, provider)
                 except Exception as e:  # noqa: BLE001 — любую ошибку сохраняем в оценку, прогон идёт дальше
                     log.exception("evaluate %s", cid)
                     res = {"status": "error", "error": f"{type(e).__name__}: {e}", "answers": {},
