@@ -66,6 +66,8 @@ function httpClient(base) {
     runDiff: (id) => req('GET', `/runs/${enc(id)}/diff`),
     run: (id) => req('GET', `/runs/${enc(id)}`),
     runs: () => req('GET', '/runs'),
+    ask: (body) => req('POST', '/ask', body),
+    asks: () => req('GET', '/asks'),
     checklists: () => req('GET', '/checklists'),
     checklist: (id) => req('GET', `/checklists/${enc(id)}`),
     saveChecklist: (body) => req('POST', '/checklists', body),
