@@ -350,6 +350,47 @@ export async function createMockApi() {
       return clone(c);
     },
     async validateChecklist(config) { await wait(80); const errors = validate(config); return { ok: !errors.length, errors }; },
+    async tryChecklist({ config, conversation_ids, provider, criteria }) {
+      const started = performance.now();
+      await wait(650);
+      const fail = (detail, errors = [detail]) => { throw new MockError(422, detail, { detail, errors }); };
+      const errors = validate(config);
+      if (errors.length) fail('Чек-лист не проверен: исправьте ошибки.', errors);
+      const p = st.meta.providers.find((x) => x.id === (provider || st.settings.default_provider));
+      if (!p || p.available === false) fail('Модель недоступна.');
+      if (criteria && (!criteria.length || criteria.some((id) => !config.criteria.some((c) => c.id === id)))) fail('Укажите непустой список критериев из чек-листа.');
+      let selected = [];
+      if (conversation_ids != null) {
+        const ids = [...new Set(conversation_ids.map((id) => id.trim()).filter(Boolean))];
+        if (!ids.length) fail('Выберите диалоги для проверки.');
+        if (ids.some((id) => !st.convs.some((c) => c.id === id))) fail('Один из выбранных диалогов не найден.');
+        selected = ids.slice(0, 3).map((id) => st.convs.find((c) => c.id === id));
+      } else {
+        const languages = new Set();
+        for (const successful of [true, false]) {
+          const group = st.convs.filter((c) => !!latestSuccess(c.id, p.model) === successful);
+          for (const diverse of [true, false]) for (const c of group) {
+            const language = (c.language || '').toLowerCase();
+            if (selected.length === 3 || selected.includes(c) || (diverse && languages.has(language))) continue;
+            selected.push(c); languages.add(language);
+          }
+        }
+      }
+      if (!selected.length) fail('Нет диалогов для проверки: сначала загрузите набор.');
+      const hashes = Object.fromEntries(await Promise.all(config.criteria.map(async (c) => [c.id, await fingerprint(c, config, p.model)])));
+      const items = selected.map((conv) => {
+        const previous = latestSuccess(conv.id, p.model);
+        const changed = config.criteria.filter((c) => previous?.criteria.find((x) => x.id === c.id)?.fingerprint !== hashes[c.id]);
+        const only = criteria ? config.criteria.filter((c) => criteria.includes(c.id)) : changed.length ? changed : config.criteria;
+        return { id: conv.id, language: conv.language, channel: conv.channel, criteria: only.map((c) => ({
+          id: c.id, title: c.title, answer: c.type === 'flag' ? 'Нет' : allowedAnswers(c)[0],
+          previous_answer: previous?.criteria.find((x) => x.id === c.id)?.original.answer ?? null,
+          explanation: 'Демо-режим: пример ответа без вызова модели. Проверьте требование по реплике [1].',
+          evidence: conv.transcript?.length ? [1] : [],
+        })) };
+      });
+      return { provider: p.id, model: p.model, items, cost_usd: 0, latency_s: r2((performance.now() - started) / 1000) };
+    },
     async assistChecklist({ config, criterion_id }) {
       await wait(650);
       const c = config?.criteria?.find((x) => x.id === criterion_id);

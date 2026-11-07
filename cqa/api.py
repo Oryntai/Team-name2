@@ -24,7 +24,7 @@ from pydantic import BaseModel
 from starlette.background import BackgroundTask
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from . import assist, audio, judge, pii, sources
+from . import assist, audio, judge, pii, sandbox, sources
 from .checklist import allowed_answers, normalize, validate
 from .db import DB
 from .judge.providers import env as read_env
@@ -74,6 +74,13 @@ class AssistIn(BaseModel):
     config: dict
     criterion_id: str
     provider: str | None = None
+
+
+class TryIn(BaseModel):
+    config: dict
+    conversation_ids: list[str] | None = None
+    provider: str | None = None
+    criteria: list[str] | None = None
 
 
 class AppealIn(BaseModel):
@@ -543,6 +550,24 @@ def create_app(db_path: str | os.PathLike | None = None, *, web_dir: str | os.Pa
             _fail(422, "Модель недоступна: проверьте настройки провайдера.")
         try:
             return await assist.draft_guidance(body.config, body.criterion_id, judge.get_provider(pid))
+        except judge.ProviderError as e:
+            _fail(502, str(e))
+
+    @app.post("/api/checklists/try")
+    async def checklist_try(body: TryIn):
+        cfg = normalize(body.config) if isinstance(body.config.get("criteria"), list) else body.config
+        errs = validate(cfg)
+        if errs:
+            _fail(422, "Чек-лист не проверен: исправьте ошибки.", errs)
+        pid = body.provider or default_provider()
+        if pid not in visible_providers():
+            _fail(422, f"Неизвестная модель «{pid}».")
+        if not judge.available(pid):
+            _fail(422, "Модель недоступна: проверьте настройки провайдера.")
+        try:
+            return await sandbox.preview(db, cfg, judge.get_provider(pid), body.conversation_ids, body.criteria)
+        except ValueError as e:
+            _fail(422, str(e))
         except judge.ProviderError as e:
             _fail(502, str(e))
 

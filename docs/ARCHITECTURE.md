@@ -37,6 +37,7 @@ API организаторов (GET ?group_id=…) ─┐
 | `cqa/judge/` | промпт и JSON-схема из чек-листа, провайдеры моделей, `evaluate()` | ядро |
 | `cqa/checklists/default.json` | начальная конфигурация (PDF организаторов) | ядро |
 | `cqa/assist.py` | черновик пояснения и замечания к критерию: один вызов существующего провайдера | сервер |
+| `cqa/sandbox.py` | проба черновика на трёх диалогах параллельно, без записи в базу | сервер |
 | `cqa/db.py` | SQLite: схема и запросы | сервер |
 | `cqa/sources.py` | импорт из API организаторов и из файла | сервер |
 | `cqa/audio.py` | прокси записи звонка (CORS, свежая подписанная ссылка), смещение реплики в записи | сервер |
@@ -170,6 +171,7 @@ appeals(id PK, evaluation_id, criterion_id, comment, created_at, status open|con
 | `POST /api/checklists` | `{"config","note","parent_id"}` | `201 {"id","version"}` или `422 {"errors": [...]}` |
 | `POST /api/checklists/validate` | `{"config"}` | `{"ok","errors"}` |
 | `POST /api/checklists/assist` | `{"config": <весь чек-лист>, "criterion_id": "05", "provider"?: "haiku"}` | `{"guidance": str, "warnings": [str], "na_when_suggestion": str \| null, "model": str, "cost_usd": number, "latency_s": number}` |
+| `POST /api/checklists/try` | `{"config": <весь чек-лист>, "conversation_ids"?: [...], "provider"?, "criteria"?: [...]}` | `{"provider","model","items": [{"id","language","channel","criteria": [{"id","title","answer","explanation","evidence": [1,2],"previous_answer": str\|null}]}],"cost_usd","latency_s"}`; без записи |
 | `GET /api/appeals` | `?status=open\|decided\|all` | `[{"id","evaluation_id","conversation_id","criterion_id","criterion_title","original_answer","explanation","evidence","evidence_replies": [{"n","timestamp","speaker","text"}],"comment","status","new_answer","reason","created_at","decided_at","total_original","total_final"}]` |
 | `POST /api/appeals` | `{"evaluation_id","criterion_id","comment"}` | `201` апелляция; `409`, если по критерию уже есть открытая |
 | `POST /api/appeals/{id}/decision` | `{"decision": "confirm"\|"change", "new_answer"?, "reason"}` | `{"appeal", "evaluation"}` (оценка уже с новым итогом) |
@@ -180,6 +182,20 @@ appeals(id PK, evaluation_id, criterion_id, comment, created_at, status open|con
 Без `provider` используется модель из настроек (по умолчанию Haiku). Неизвестный номер критерия, неверная структура
 или недоступный провайдер — `422`; ошибка провайдера или некорректный ответ модели — `502`; формат ошибок — `{"detail", "errors"}`.
 Подсказка ничего не сохраняет: методист вставляет пояснение или заменяет условие N/A в редакторе и сохраняет новую версию обычной кнопкой.
+
+`POST /api/checklists/try` валидирует несохранённый чек-лист через `checklist.validate` и оценивает не больше
+трёх уникальных диалогов параллельно. По умолчанию сначала выбираются диалоги с прошлой успешной оценкой
+той же моделью, по возможности разных языков; недостающие места заполняются диалогами без такой оценки.
+Явный `conversation_ids` сохраняет порядок, после удаления дубликатов берутся первые три; пустой список — `422`.
+По каждому диалогу через `incremental.partition` выбираются изменённые определения; если изменений нет
+или прошлой оценки нет, оцениваются все критерии. Явный непустой `criteria` переопределяет выбор.
+`previous_answer` — исходный ответ последней успешной оценки этой моделью, без решений по апелляциям.
+Без `provider` используется модель из настроек. Неверный чек-лист, неизвестные диалоги/критерии, отсутствие
+диалогов или недоступная модель — `422`; сбой провайдера/ответа модели — `502` с id диалога в ошибке.
+Ошибки имеют формат `{"detail","errors"}`; при сбое одного диалога весь запрос возвращает ошибку.
+`cost_usd` — сумма стоимости вызовов, `latency_s` — общее время параллельной оценки в секундах.
+Чек-лист, прогоны и ответы не сохраняются; итог не рассчитывается. В редакторе кнопка «Проверить на 3 диалогах»
+работает с черновиком, показывает сравнение ответов, обоснования, номера реплик и ссылки на карточки.
 
 `GET /api/evaluations/{id}`:
 ```json
