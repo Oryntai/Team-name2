@@ -31,6 +31,8 @@ async def main():
     ap.add_argument("--split", choices=["train", "holdout", "all"], default="train")
     ap.add_argument("--conc", type=int, default=20)
     ap.add_argument("--limit", type=int, default=0, help="первые N чатов (для проверки пути)")
+    ap.add_argument("--checklist", default="", help="путь к чек-листу (по умолчанию — начальный из cqa/checklists)")
+    ap.add_argument("--tag", default="", help="метка прогона в имени папки")
     args = ap.parse_args()
 
     ref = json.loads((ROOT / "lab" / "reference_copper.json").read_text())["chats"]
@@ -38,7 +40,7 @@ async def main():
     ids = {"train": split["train"], "holdout": split["holdout"], "all": split["train"] + split["holdout"]}[args.split]
     ids = sorted(ids)[: args.limit or None]
     recs = {r["conversation_id"]: r for r in json.loads((ROOT / "data" / "dev.json").read_text())["data"]["records"]}
-    cfg = ck.load_default()
+    cfg = ck.normalize(json.loads(pathlib.Path(args.checklist).read_text())) if args.checklist else ck.load_default()
     crit_ids = [c["id"] for c in cfg["criteria"]]
     prov = get_provider(args.provider)
     sem = asyncio.Semaphore(args.conc)
@@ -94,7 +96,7 @@ async def main():
             if d:
                 print(f"  {k}: " + "; ".join(d))
 
-    out = ROOT / "runs" / f"{time.strftime('%Y%m%d-%H%M%S')}-product-{args.provider}-{args.split}"
+    out = ROOT / "runs" / f"{time.strftime('%Y%m%d-%H%M%S')}-product-{args.provider}-{args.split}{"-" + args.tag if args.tag else ""}"
     out.mkdir(parents=True, exist_ok=True)
     (out / "results.json").write_text(json.dumps({"args": vars(args), "wall": wall, "cost": cost, "results": res},
                                                  ensure_ascii=False, indent=1))
