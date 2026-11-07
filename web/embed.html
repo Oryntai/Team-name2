@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>CQA — пример встраивания</title>
+  <link rel="stylesheet" href="css/cqa.css">
+  <script type="module" src="js/embed.js"></script>
+  <style>
+    /* Условная форма обращения в CRM — только чтобы показать встраивание одного компонента. */
+    .crm { min-height: 100vh; background: #eef1f4; font-family: var(--cqa-font); color: #1f2933; }
+    .crm-top { height: 44px; background: #243447; color: #fff; display: flex; align-items: center; padding: 0 18px; gap: 12px; font-size: 14px; font-weight: 600; }
+    .crm-top small { opacity: .7; font-weight: 500; }
+    .crm-body { display: grid; grid-template-columns: 300px minmax(0, 1fr); gap: 16px; padding: 16px; }
+    .crm-side { background: #fff; border: 1px solid #d9dee5; border-radius: 6px; padding: 14px 16px; font-size: 13px; align-self: start; }
+    .crm-side h2 { margin: 0 0 10px; font-size: 15px; }
+    .crm-side dl { margin: 0; display: grid; grid-template-columns: auto 1fr; gap: 6px 12px; }
+    .crm-side dt { color: #6b7785; }
+    .crm-side dd { margin: 0; font-weight: 600; word-break: break-all; }
+    .crm-tab { background: #fff; border: 1px solid #d9dee5; border-radius: 6px; padding: 14px; min-width: 0; }
+    .crm-tab-title { font-size: 13px; font-weight: 700; color: #243447; border-bottom: 2px solid #243447; display: inline-block; padding-bottom: 6px; margin-bottom: 12px; }
+    @media (max-width: 900px) { .crm-body { grid-template-columns: minmax(0, 1fr); } }
+  </style>
+</head>
+<body class="cqa-body">
+  <div class="crm">
+    <div class="crm-top">Форма обращения <small>· пример: компонент CQA как веб-ресурс формы CRM</small></div>
+    <div class="crm-body">
+      <aside class="crm-side">
+        <h2>Обращение</h2>
+        <dl>
+          <dt>Диалог</dt><dd data-embed="id">—</dd>
+          <dt>Компонент</dt><dd>&lt;cqa-card&gt;</dd>
+          <dt>API</dt><dd>/api</dd>
+        </dl>
+        <p style="color:#6b7785;margin:12px 0 0">Откройте страницу с параметром <code>?c=&lt;id диалога&gt;</code>. Компонент сам обращается к серверу CQA по атрибуту <code>api-base</code> и подстраивается под ширину вкладки.</p>
+      </aside>
+      <section class="crm-tab">
+        <div class="crm-tab-title">Качество диалога</div>
+        <div data-embed="slot"></div>
+      </section>
+    </div>
+  </div>
+</body>
+</html>

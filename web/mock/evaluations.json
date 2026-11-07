@@ -1,0 +1,1992 @@
+[
+ {
+  "id": 1,
+  "run_id": 1,
+  "conversation_id": "demo-ru-001",
+  "checklist": {
+   "id": 1,
+   "name": "Чек-лист качества чатов",
+   "version": 1,
+   "label": "Чек-лист качества чатов · v1"
+  },
+  "provider": "haiku",
+  "model": "claude-haiku-5-5",
+  "prompt_version": "p1",
+  "created_at": "2026-11-07T16:05:12",
+  "latency_s": 8.2,
+  "input_tokens": 2050,
+  "output_tokens": 1430,
+  "cost_usd": 0.00092,
+  "status": "ok",
+  "error": null,
+  "pii_masked": [],
+  "criteria": [
+   {
+    "id": "01",
+    "title": "Установление контакта",
+    "section": "Начало и понимание запроса",
+    "type": "bool",
+    "weight": 10,
+    "na": false,
+    "allowed": [
+     "Да",
+     "Нет"
+    ],
+    "original": {
+     "answer": "Да",
+     "explanation": "В первом ответе [5] оператор поздоровался по-русски и представился (Алия).",
+     "evidence": [
+      5
+     ]
+    },
+    "final_answer": "Да",
+    "appeal": null,
+    "score_original": {
+     "applicable": true,
+     "points": 10.0,
+     "weight_eff": 11.76,
+     "points_eff": 11.76
+    },
+    "score_final": {
+     "applicable": true,
+     "points": 10.0,
+     "weight_eff": 11.76,
+     "points_eff": 11.76
+    }
+   },
+   {
+    "id": "02",
+    "title": "Выявление потребности",
+    "section": "Начало и понимание запроса",
+    "type": "bool",
+    "weight": 15,
+    "na": true,
+    "allowed": [
+     "Да",
+     "Нет",
+     "N/A"
+    ],
+    "original": {
+     "answer": "N/A",
+     "explanation": "Клиент сразу сформулировал запрос [1]: вывести деньги на карту — данных для ответа хватало с самого начала.",
+     "evidence": [
+      1
+     ]
+    },
+    "final_answer": "N/A",
+    "appeal": null,
+    "score_original": {
+     "applicable": false,
+     "points": 0.0,
+     "weight_eff": 0.0,
+     "points_eff": 0.0
+    },
+    "score_final": {
+     "applicable": false,
+     "points": 0.0,
+     "weight_eff": 0.0,
+     "points_eff": 0.0
+    }
+   },
+   {
+    "id": "03",
+    "title": "Идентификация",
+    "section": "Безопасность и решение",
+    "type": "bool",
+    "weight": 20,
+    "na": true,
+    "allowed": [
+     "Да",
+     "Нет",
+     "N/A"
+    ],
+    "original": {
+     "answer": "Да",
+     "explanation": "Оператор запросил подтверждение личности [5] до ответа по счёту; система подтвердила личность [7].",
+     "evidence": [
+      5,
+      7
+     ]
+    },
+    "final_answer": "Да",
+    "appeal": null,
+    "score_original": {
+     "applicable": true,
+     "points": 20.0,
+     "weight_eff": 23.53,
+     "points_eff": 23.53
+    },
+    "score_final": {
+     "applicable": true,
+     "points": 20.0,
+     "weight_eff": 23.53,
+     "points_eff": 23.53
+    }
+   },
+   {
+    "id": "04",
+    "title": "Корректная и полная консультация",
+    "section": "Безопасность и решение",
+    "type": "scale",
+    "weight": 20,
+    "na": true,
+    "allowed": [
+     "20",
+     "15",
+     "10",
+     "5",
+     "0",
+     "N/A"
+    ],
+    "original": {
+     "answer": "20",
+     "explanation": "Дан путь вывода и срок зачисления [8], отдельно закрыт вопрос о комиссии [10].",
+     "evidence": [
+      8,
+      10
+     ]
+    },
+    "final_answer": "20",
+    "appeal": null,
+    "score_original": {
+     "applicable": true,
+     "points": 20.0,
+     "weight_eff": 23.53,
+     "points_eff": 23.53
+    },
+    "score_final": {
+     "applicable": true,
+     "points": 20.0,
+     "weight_eff": 23.53,
+     "points_eff": 23.53
+    }
+   },
+   {
+    "id": "05",
+    "title": "Эмпатия и клиентоориентированность",
+    "section": "Ведение и завершение диалога",
+    "type": "bool",
+    "weight": 15,
+    "na": false,
+    "allowed": [
+     "Да",
+     "Нет"
+    ],
+    "original": {
+     "answer": "Да",
+     "explanation": "Оператор вежлив на протяжении всего диалога [5], [12].",
+     "evidence": [
+      5,
+      12
+     ]
+    },
+    "final_answer": "Да",
+    "appeal": null,
+    "score_original": {
+     "applicable": true,
+     "points": 15.0,
+     "weight_eff": 17.65,
+     "points_eff": 17.65
+    },
+    "score_final": {
+     "applicable": true,
+     "points": 15.0,
+     "weight_eff": 17.65,
+     "points_eff": 17.65
+    }
+   },
+   {
+    "id": "06",
+    "title": "Управление диалогом, скорость и грамотность",
+    "section": "Ведение и завершение диалога",
+    "type": "scale",
+    "weight": 15,
+    "na": false,
+    "allowed": [
+     "10",
+     "7",
+     "4",
+     "0"
+    ],
+    "original": {
+     "answer": "10",
+     "explanation": "Ответы ясные и по порядку [8], [10]; ожидания не было.",
+     "evidence": [
+      8,
+      10
+     ]
+    },
+    "final_answer": "10",
+    "appeal": null,
+    "score_original": {
+     "applicable": true,
+     "points": 15.0,
+     "weight_eff": 17.65,
+     "points_eff": 17.65
+    },
+    "score_final": {
+     "applicable": true,
+     "points": 15.0,
+     "weight_eff": 17.65,
+     "points_eff": 17.65
+    }
+   },
+   {
+    "id": "07",
+    "title": "Завершение",
+    "section": "Ведение и завершение диалога",
+    "type": "bool",
+    "weight": 5,
+    "na": true,
+    "allowed": [
+     "Да",
+     "Нет",
+     "N/A"
+    ],
+    "original": {
+     "answer": "Да",
+     "explanation": "Предложил дальнейшую помощь [10] и попрощался [12].",
+     "evidence": [
+      10,
+      12
+     ]
+    },
+    "final_answer": "Да",
+    "appeal": null,
+    "score_original": {
+     "applicable": true,
+     "points": 5.0,
+     "weight_eff": 5.88,
+     "points_eff": 5.88
+    },
+    "score_final": {
+     "applicable": true,
+     "points": 5.0,
+     "weight_eff": 5.88,
+     "points_eff": 5.88
+    }
+   },
+   {
+    "id": "08",
+    "title": "Грубые ошибки",
+    "section": "Грубые нарушения",
+    "type": "flag",
+    "weight": 0,
+    "na": false,
+    "allowed": [
+     "Да",
+     "Нет"
+    ],
+    "original": {
+     "answer": "Нет",
+     "explanation": "Оскорблений, предложений в обход компании и раскрытия данных без проверки нет.",
+     "evidence": [
+      5,
+      8
+     ]
+    },
+    "final_answer": "Нет",
+    "appeal": null,
+    "score_original": {
+     "applicable": false,
+     "points": 0.0,
+     "weight_eff": 0.0,
+     "points_eff": 0.0
+    },
+    "score_final": {
+     "applicable": false,
+     "points": 0.0,
+     "weight_eff": 0.0,
+     "points_eff": 0.0
+    }
+   }
+  ],
+  "original": {
+   "total": 100.0,
+   "gross": false,
+   "sections": [
+    {
+     "name": "Начало и понимание запроса",
+     "ids": [
+      "01",
+      "02"
+     ],
+     "points_eff": 11.76,
+     "max_eff": 11.76,
+     "percent": 100.0
+    },
+    {
+     "name": "Безопасность и решение",
+     "ids": [
+      "03",
+      "04"
+     ],
+     "points_eff": 47.06,
+     "max_eff": 47.06,
+     "percent": 100.0
+    },
+    {
+     "name": "Ведение и завершение диалога",
+     "ids": [
+      "05",
+      "06",
+      "07"
+     ],
+     "points_eff": 41.18,
+     "max_eff": 41.18,
+     "percent": 100.0
+    },
+    {
+     "name": "Грубые нарушения",
+     "ids": [
+      "08"
+     ],
+     "points_eff": 0.0,
+     "max_eff": 0.0,
+     "percent": null
+    }
+   ]
+  },
+  "final": {
+   "total": 100.0,
+   "gross": false,
+   "sections": [
+    {
+     "name": "Начало и понимание запроса",
+     "ids": [
+      "01",
+      "02"
+     ],
+     "points_eff": 11.76,
+     "max_eff": 11.76,
+     "percent": 100.0
+    },
+    {
+     "name": "Безопасность и решение",
+     "ids": [
+      "03",
+      "04"
+     ],
+     "points_eff": 47.06,
+     "max_eff": 47.06,
+     "percent": 100.0
+    },
+    {
+     "name": "Ведение и завершение диалога",
+     "ids": [
+      "05",
+      "06",
+      "07"
+     ],
+     "points_eff": 41.18,
+     "max_eff": 41.18,
+     "percent": 100.0
+    },
+    {
+     "name": "Грубые нарушения",
+     "ids": [
+      "08"
+     ],
+     "points_eff": 0.0,
+     "max_eff": 0.0,
+     "percent": null
+    }
+   ]
+  }
+ },
+ {
+  "id": 2,
+  "run_id": 1,
+  "conversation_id": "demo-kz-001",
+  "checklist": {
+   "id": 1,
+   "name": "Чек-лист качества чатов",
+   "version": 1,
+   "label": "Чек-лист качества чатов · v1"
+  },
+  "provider": "haiku",
+  "model": "claude-haiku-5-5",
+  "prompt_version": "p1",
+  "created_at": "2026-11-07T16:05:14",
+  "latency_s": 9.1,
+  "input_tokens": 1980,
+  "output_tokens": 1520,
+  "cost_usd": 0.000958,
+  "status": "ok",
+  "error": null,
+  "pii_masked": [],
+  "criteria": [
+   {
+    "id": "01",
+    "title": "Установление контакта",
+    "section": "Начало и понимание запроса",
+    "type": "bool",
+    "weight": 10,
+    "na": false,
+    "allowed": [
+     "Да",
+     "Нет"
+    ],
+    "original": {
+     "answer": "Нет",
+     "explanation": "В первом ответе [4] оператор поздоровался на казахском, но не представился.",
+     "evidence": [
+      4
+     ]
+    },
+    "final_answer": "Нет",
+    "appeal": null,
+    "score_original": {
+     "applicable": true,
+     "points": 0.0,
+     "weight_eff": 12.5,
+     "points_eff": 0.0
+    },
+    "score_final": {
+     "applicable": true,
+     "points": 0.0,
+     "weight_eff": 12.5,
+     "points_eff": 0.0
+    }
+   },
+   {
+    "id": "02",
+    "title": "Выявление потребности",
+    "section": "Начало и понимание запроса",
+    "type": "bool",
+    "weight": 15,
+    "na": true,
+    "allowed": [
+     "Да",
+     "Нет",
+     "N/A"
+    ],
+    "original": {
+     "answer": "Да",
+     "explanation": "Уточнил способ пополнения [4] до ответа о сроках.",
+     "evidence": [
+      4
+     ]
+    },
+    "final_answer": "Да",
+    "appeal": null,
+    "score_original": {
+     "applicable": true,
+     "points": 15.0,
+     "weight_eff": 18.75,
+     "points_eff": 18.75
+    },
+    "score_final": {
+     "applicable": true,
+     "points": 15.0,
+     "weight_eff": 18.75,
+     "points_eff": 18.75
+    }
+   },
+   {
+    "id": "03",
+    "title": "Идентификация",
+    "section": "Безопасность и решение",
+    "type": "bool",
+    "weight": 20,
+    "na": true,
+    "allowed": [
+     "Да",
+     "Нет",
+     "N/A"
+    ],
+    "original": {
+     "answer": "N/A",
+     "explanation": "Общий вопрос о сроках зачисления; данные счёта не раскрывались [6] — идентификация не требовалась.",
+     "evidence": [
+      6
+     ]
+    },
+    "final_answer": "N/A",
+    "appeal": null,
+    "score_original": {
+     "applicable": false,
+     "points": 0.0,
+     "weight_eff": 0.0,
+     "points_eff": 0.0
+    },
+    "score_final": {
+     "applicable": false,
+     "points": 0.0,
+     "weight_eff": 0.0,
+     "points_eff": 0.0
+    }
+   },
+   {
+    "id": "04",
+    "title": "Корректная и полная консультация",
+    "section": "Безопасность и решение",
+    "type": "scale",
+    "weight": 20,
+    "na": true,
+    "allowed": [
+     "20",
+     "15",
+     "10",
+     "5",
+     "0",
+     "N/A"
+    ],
+    "original": {
+     "answer": "15",
+     "explanation": "Назван срок зачисления [6], но не предложено проверить платёж, если деньги не поступят.",
+     "evidence": [
+      6
+     ]
+    },
+    "final_answer": "15",
+    "appeal": null,
+    "score_original": {
+     "applicable": true,
+     "points": 15.0,
+     "weight_eff": 25.0,
+     "points_eff": 18.75
+    },
+    "score_final": {
+     "applicable": true,
+     "points": 15.0,
+     "weight_eff": 25.0,
+     "points_eff": 18.75
+    }
+   },
+   {
+    "id": "05",
+    "title": "Эмпатия и клиентоориентированность",
+    "section": "Ведение и завершение диалога",
+    "type": "bool",
+    "weight": 15,
+    "na": false,
+    "allowed": [
+     "Да",
+     "Нет"
+    ],
+    "original": {
+     "answer": "Нет",
+     "explanation": "Клиент написал, что сильно волнуется [5]; оператор не отреагировал на беспокойство, ответ сухой [6].",
+     "evidence": [
+      5,
+      6
+     ]
+    },
+    "final_answer": "Нет",
+    "appeal": {
+     "id": 1,
+     "comment": "Оператор вежливо и по существу ответил, когда придут деньги, — это и есть реакция на беспокойство клиента.",
+     "status": "open",
+     "new_answer": null,
+     "reason": null,
+     "created_at": "2026-11-07T16:20:00",
+     "decided_at": null
+    },
+    "score_original": {
+     "applicable": true,
+     "points": 0.0,
+     "weight_eff": 18.75,
+     "points_eff": 0.0
+    },
+    "score_final": {
+     "applicable": true,
+     "points": 0.0,
+     "weight_eff": 18.75,
+     "points_eff": 0.0
+    }
+   },
+   {
+    "id": "06",
+    "title": "Управление диалогом, скорость и грамотность",
+    "section": "Ведение и завершение диалога",
+    "type": "scale",
+    "weight": 15,
+    "na": false,
+    "allowed": [
+     "10",
+     "7",
+     "4",
+     "0"
+    ],
+    "original": {
+     "answer": "10",
+     "explanation": "Ответы короткие и понятные [4], [6].",
+     "evidence": [
+      4,
+      6
+     ]
+    },
+    "final_answer": "10",
+    "appeal": null,
+    "score_original": {
+     "applicable": true,
+     "points": 15.0,
+     "weight_eff": 18.75,
+     "points_eff": 18.75
+    },
+    "score_final": {
+     "applicable": true,
+     "points": 15.0,
+     "weight_eff": 18.75,
+     "points_eff": 18.75
+    }
+   },
+   {
+    "id": "07",
+    "title": "Завершение",
+    "section": "Ведение и завершение диалога",
+    "type": "bool",
+    "weight": 5,
+    "na": true,
+    "allowed": [
+     "Да",
+     "Нет",
+     "N/A"
+    ],
+    "original": {
+     "answer": "Нет",
+     "explanation": "Оператор попрощался [8], но не подвёл итог и не предложил дальнейшую помощь.",
+     "evidence": [
+      8
+     ]
+    },
+    "final_answer": "Нет",
+    "appeal": null,
+    "score_original": {
+     "applicable": true,
+     "points": 0.0,
+     "weight_eff": 6.25,
+     "points_eff": 0.0
+    },
+    "score_final": {
+     "applicable": true,
+     "points": 0.0,
+     "weight_eff": 6.25,
+     "points_eff": 0.0
+    }
+   },
+   {
+    "id": "08",
+    "title": "Грубые ошибки",
+    "section": "Грубые нарушения",
+    "type": "flag",
+    "weight": 0,
+    "na": false,
+    "allowed": [
+     "Да",
+     "Нет"
+    ],
+    "original": {
+     "answer": "Нет",
+     "explanation": "Грубых нарушений нет.",
+     "evidence": [
+      4,
+      6,
+      8
+     ]
+    },
+    "final_answer": "Нет",
+    "appeal": null,
+    "score_original": {
+     "applicable": false,
+     "points": 0.0,
+     "weight_eff": 0.0,
+     "points_eff": 0.0
+    },
+    "score_final": {
+     "applicable": false,
+     "points": 0.0,
+     "weight_eff": 0.0,
+     "points_eff": 0.0
+    }
+   }
+  ],
+  "original": {
+   "total": 56.25,
+   "gross": false,
+   "sections": [
+    {
+     "name": "Начало и понимание запроса",
+     "ids": [
+      "01",
+      "02"
+     ],
+     "points_eff": 18.75,
+     "max_eff": 31.25,
+     "percent": 60.0
+    },
+    {
+     "name": "Безопасность и решение",
+     "ids": [
+      "03",
+      "04"
+     ],
+     "points_eff": 18.75,
+     "max_eff": 25.0,
+     "percent": 75.0
+    },
+    {
+     "name": "Ведение и завершение диалога",
+     "ids": [
+      "05",
+      "06",
+      "07"
+     ],
+     "points_eff": 18.75,
+     "max_eff": 43.75,
+     "percent": 42.86
+    },
+    {
+     "name": "Грубые нарушения",
+     "ids": [
+      "08"
+     ],
+     "points_eff": 0.0,
+     "max_eff": 0.0,
+     "percent": null
+    }
+   ]
+  },
+  "final": {
+   "total": 56.25,
+   "gross": false,
+   "sections": [
+    {
+     "name": "Начало и понимание запроса",
+     "ids": [
+      "01",
+      "02"
+     ],
+     "points_eff": 18.75,
+     "max_eff": 31.25,
+     "percent": 60.0
+    },
+    {
+     "name": "Безопасность и решение",
+     "ids": [
+      "03",
+      "04"
+     ],
+     "points_eff": 18.75,
+     "max_eff": 25.0,
+     "percent": 75.0
+    },
+    {
+     "name": "Ведение и завершение диалога",
+     "ids": [
+      "05",
+      "06",
+      "07"
+     ],
+     "points_eff": 18.75,
+     "max_eff": 43.75,
+     "percent": 42.86
+    },
+    {
+     "name": "Грубые нарушения",
+     "ids": [
+      "08"
+     ],
+     "points_eff": 0.0,
+     "max_eff": 0.0,
+     "percent": null
+    }
+   ]
+  }
+ },
+ {
+  "id": 3,
+  "run_id": 1,
+  "conversation_id": "demo-en-001",
+  "checklist": {
+   "id": 1,
+   "name": "Чек-лист качества чатов",
+   "version": 1,
+   "label": "Чек-лист качества чатов · v1"
+  },
+  "provider": "haiku",
+  "model": "claude-haiku-5-5",
+  "prompt_version": "p1",
+  "created_at": "2026-11-07T16:05:13",
+  "latency_s": 6.4,
+  "input_tokens": 1610,
+  "output_tokens": 1090,
+  "cost_usd": 0.000706,
+  "status": "ok",
+  "error": null,
+  "pii_masked": [],
+  "criteria": [
+   {
+    "id": "01",
+    "title": "Установление контакта",
+    "section": "Начало и понимание запроса",
+    "type": "bool",
+    "weight": 10,
+    "na": false,
+    "allowed": [
+     "Да",
+     "Нет"
+    ],
+    "original": {
+     "answer": "Да",
+     "explanation": "Первый ответ [5]: приветствие на английском и имя оператора (Sam).",
+     "evidence": [
+      5
+     ]
+    },
+    "final_answer": "Да",
+    "appeal": null,
+    "score_original": {
+     "applicable": true,
+     "points": 10.0,
+     "weight_eff": 18.18,
+     "points_eff": 18.18
+    },
+    "score_final": {
+     "applicable": true,
+     "points": 10.0,
+     "weight_eff": 18.18,
+     "points_eff": 18.18
+    }
+   },
+   {
+    "id": "02",
+    "title": "Выявление потребности",
+    "section": "Начало и понимание запроса",
+    "type": "bool",
+    "weight": 15,
+    "na": true,
+    "allowed": [
+     "Да",
+     "Нет",
+     "N/A"
+    ],
+    "original": {
+     "answer": "Да",
+     "explanation": "Оператор спросил, чем помочь [5], — запрос клиента ещё не был известен.",
+     "evidence": [
+      5
+     ]
+    },
+    "final_answer": "Да",
+    "appeal": null,
+    "score_original": {
+     "applicable": true,
+     "points": 15.0,
+     "weight_eff": 27.27,
+     "points_eff": 27.27
+    },
+    "score_final": {
+     "applicable": true,
+     "points": 15.0,
+     "weight_eff": 27.27,
+     "points_eff": 27.27
+    }
+   },
+   {
+    "id": "03",
+    "title": "Идентификация",
+    "section": "Безопасность и решение",
+    "type": "bool",
+    "weight": 20,
+    "na": true,
+    "allowed": [
+     "Да",
+     "Нет",
+     "N/A"
+    ],
+    "original": {
+     "answer": "N/A",
+     "explanation": "Клиент не успел сформулировать запрос; идентификация не требовалась.",
+     "evidence": [
+      6
+     ]
+    },
+    "final_answer": "N/A",
+    "appeal": null,
+    "score_original": {
+     "applicable": false,
+     "points": 0.0,
+     "weight_eff": 0.0,
+     "points_eff": 0.0
+    },
+    "score_final": {
+     "applicable": false,
+     "points": 0.0,
+     "weight_eff": 0.0,
+     "points_eff": 0.0
+    }
+   },
+   {
+    "id": "04",
+    "title": "Корректная и полная консультация",
+    "section": "Безопасность и решение",
+    "type": "scale",
+    "weight": 20,
+    "na": true,
+    "allowed": [
+     "20",
+     "15",
+     "10",
+     "5",
+     "0",
+     "N/A"
+    ],
+    "original": {
+     "answer": "N/A",
+     "explanation": "Клиент покинул чат [6] до того, как сформулировал запрос.",
+     "evidence": [
+      3,
+      6
+     ]
+    },
+    "final_answer": "N/A",
+    "appeal": null,
+    "score_original": {
+     "applicable": false,
+     "points": 0.0,
+     "weight_eff": 0.0,
+     "points_eff": 0.0
+    },
+    "score_final": {
+     "applicable": false,
+     "points": 0.0,
+     "weight_eff": 0.0,
+     "points_eff": 0.0
+    }
+   },
+   {
+    "id": "05",
+    "title": "Эмпатия и клиентоориентированность",
+    "section": "Ведение и завершение диалога",
+    "type": "bool",
+    "weight": 15,
+    "na": false,
+    "allowed": [
+     "Да",
+     "Нет"
+    ],
+    "original": {
+     "answer": "Да",
+     "explanation": "Оператор вежлив [5].",
+     "evidence": [
+      5
+     ]
+    },
+    "final_answer": "Да",
+    "appeal": null,
+    "score_original": {
+     "applicable": true,
+     "points": 15.0,
+     "weight_eff": 27.27,
+     "points_eff": 27.27
+    },
+    "score_final": {
+     "applicable": true,
+     "points": 15.0,
+     "weight_eff": 27.27,
+     "points_eff": 27.27
+    }
+   },
+   {
+    "id": "06",
+    "title": "Управление диалогом, скорость и грамотность",
+    "section": "Ведение и завершение диалога",
+    "type": "scale",
+    "weight": 15,
+    "na": false,
+    "allowed": [
+     "10",
+     "7",
+     "4",
+     "0"
+    ],
+    "original": {
+     "answer": "10",
+     "explanation": "Единственная реплика оператора ясная [5].",
+     "evidence": [
+      5
+     ]
+    },
+    "final_answer": "10",
+    "appeal": null,
+    "score_original": {
+     "applicable": true,
+     "points": 15.0,
+     "weight_eff": 27.27,
+     "points_eff": 27.27
+    },
+    "score_final": {
+     "applicable": true,
+     "points": 15.0,
+     "weight_eff": 27.27,
+     "points_eff": 27.27
+    }
+   },
+   {
+    "id": "07",
+    "title": "Завершение",
+    "section": "Ведение и завершение диалога",
+    "type": "bool",
+    "weight": 5,
+    "na": true,
+    "allowed": [
+     "Да",
+     "Нет",
+     "N/A"
+    ],
+    "original": {
+     "answer": "N/A",
+     "explanation": "Чат оборвался: клиент ушёл [6], завершить диалог оператор не мог.",
+     "evidence": [
+      6
+     ]
+    },
+    "final_answer": "N/A",
+    "appeal": null,
+    "score_original": {
+     "applicable": false,
+     "points": 0.0,
+     "weight_eff": 0.0,
+     "points_eff": 0.0
+    },
+    "score_final": {
+     "applicable": false,
+     "points": 0.0,
+     "weight_eff": 0.0,
+     "points_eff": 0.0
+    }
+   },
+   {
+    "id": "08",
+    "title": "Грубые ошибки",
+    "section": "Грубые нарушения",
+    "type": "flag",
+    "weight": 0,
+    "na": false,
+    "allowed": [
+     "Да",
+     "Нет"
+    ],
+    "original": {
+     "answer": "Нет",
+     "explanation": "Нарушений нет.",
+     "evidence": [
+      5
+     ]
+    },
+    "final_answer": "Нет",
+    "appeal": null,
+    "score_original": {
+     "applicable": false,
+     "points": 0.0,
+     "weight_eff": 0.0,
+     "points_eff": 0.0
+    },
+    "score_final": {
+     "applicable": false,
+     "points": 0.0,
+     "weight_eff": 0.0,
+     "points_eff": 0.0
+    }
+   }
+  ],
+  "original": {
+   "total": 100.0,
+   "gross": false,
+   "sections": [
+    {
+     "name": "Начало и понимание запроса",
+     "ids": [
+      "01",
+      "02"
+     ],
+     "points_eff": 45.45,
+     "max_eff": 45.45,
+     "percent": 100.0
+    },
+    {
+     "name": "Безопасность и решение",
+     "ids": [
+      "03",
+      "04"
+     ],
+     "points_eff": 0.0,
+     "max_eff": 0.0,
+     "percent": null
+    },
+    {
+     "name": "Ведение и завершение диалога",
+     "ids": [
+      "05",
+      "06",
+      "07"
+     ],
+     "points_eff": 54.55,
+     "max_eff": 54.55,
+     "percent": 100.0
+    },
+    {
+     "name": "Грубые нарушения",
+     "ids": [
+      "08"
+     ],
+     "points_eff": 0.0,
+     "max_eff": 0.0,
+     "percent": null
+    }
+   ]
+  },
+  "final": {
+   "total": 100.0,
+   "gross": false,
+   "sections": [
+    {
+     "name": "Начало и понимание запроса",
+     "ids": [
+      "01",
+      "02"
+     ],
+     "points_eff": 45.45,
+     "max_eff": 45.45,
+     "percent": 100.0
+    },
+    {
+     "name": "Безопасность и решение",
+     "ids": [
+      "03",
+      "04"
+     ],
+     "points_eff": 0.0,
+     "max_eff": 0.0,
+     "percent": null
+    },
+    {
+     "name": "Ведение и завершение диалога",
+     "ids": [
+      "05",
+      "06",
+      "07"
+     ],
+     "points_eff": 54.55,
+     "max_eff": 54.55,
+     "percent": 100.0
+    },
+    {
+     "name": "Грубые нарушения",
+     "ids": [
+      "08"
+     ],
+     "points_eff": 0.0,
+     "max_eff": 0.0,
+     "percent": null
+    }
+   ]
+  }
+ },
+ {
+  "id": 4,
+  "run_id": 1,
+  "conversation_id": "demo-ru-002",
+  "checklist": {
+   "id": 1,
+   "name": "Чек-лист качества чатов",
+   "version": 1,
+   "label": "Чек-лист качества чатов · v1"
+  },
+  "provider": "haiku",
+  "model": "claude-haiku-5-5",
+  "prompt_version": "p1",
+  "created_at": "2026-11-07T16:05:16",
+  "latency_s": 8.8,
+  "input_tokens": 2010,
+  "output_tokens": 1610,
+  "cost_usd": 0.001006,
+  "status": "ok",
+  "error": null,
+  "pii_masked": [],
+  "criteria": [
+   {
+    "id": "01",
+    "title": "Установление контакта",
+    "section": "Начало и понимание запроса",
+    "type": "bool",
+    "weight": 10,
+    "na": false,
+    "allowed": [
+     "Да",
+     "Нет"
+    ],
+    "original": {
+     "answer": "Да",
+     "explanation": "Поздоровался и представился в первом ответе [4].",
+     "evidence": [
+      4
+     ]
+    },
+    "final_answer": "Да",
+    "appeal": null,
+    "score_original": {
+     "applicable": true,
+     "points": 10.0,
+     "weight_eff": 13.33,
+     "points_eff": 13.33
+    },
+    "score_final": {
+     "applicable": true,
+     "points": 10.0,
+     "weight_eff": 13.33,
+     "points_eff": 13.33
+    }
+   },
+   {
+    "id": "02",
+    "title": "Выявление потребности",
+    "section": "Начало и понимание запроса",
+    "type": "bool",
+    "weight": 15,
+    "na": true,
+    "allowed": [
+     "Да",
+     "Нет",
+     "N/A"
+    ],
+    "original": {
+     "answer": "Нет",
+     "explanation": "Клиент просил совет [5]; оператор не уточнил цель, срок и допустимый риск — сразу предложил платную консультацию [6].",
+     "evidence": [
+      5,
+      6
+     ]
+    },
+    "final_answer": "Нет",
+    "appeal": null,
+    "score_original": {
+     "applicable": true,
+     "points": 0.0,
+     "weight_eff": 20.0,
+     "points_eff": 0.0
+    },
+    "score_final": {
+     "applicable": true,
+     "points": 0.0,
+     "weight_eff": 20.0,
+     "points_eff": 0.0
+    }
+   },
+   {
+    "id": "03",
+    "title": "Идентификация",
+    "section": "Безопасность и решение",
+    "type": "bool",
+    "weight": 20,
+    "na": true,
+    "allowed": [
+     "Да",
+     "Нет",
+     "N/A"
+    ],
+    "original": {
+     "answer": "N/A",
+     "explanation": "Общий вопрос об облигациях — идентификация не требовалась.",
+     "evidence": [
+      1
+     ]
+    },
+    "final_answer": "N/A",
+    "appeal": null,
+    "score_original": {
+     "applicable": false,
+     "points": 0.0,
+     "weight_eff": 0.0,
+     "points_eff": 0.0
+    },
+    "score_final": {
+     "applicable": false,
+     "points": 0.0,
+     "weight_eff": 0.0,
+     "points_eff": 0.0
+    }
+   },
+   {
+    "id": "04",
+    "title": "Корректная и полная консультация",
+    "section": "Безопасность и решение",
+    "type": "scale",
+    "weight": 20,
+    "na": true,
+    "allowed": [
+     "20",
+     "15",
+     "10",
+     "5",
+     "0",
+     "N/A"
+    ],
+    "original": {
+     "answer": "5",
+     "explanation": "Только общая подсказка про раздел приложения [4]; по существу клиенту непонятно, как действовать.",
+     "evidence": [
+      4,
+      6
+     ]
+    },
+    "final_answer": "5",
+    "appeal": null,
+    "score_original": {
+     "applicable": true,
+     "points": 5.0,
+     "weight_eff": 26.67,
+     "points_eff": 6.67
+    },
+    "score_final": {
+     "applicable": true,
+     "points": 5.0,
+     "weight_eff": 26.67,
+     "points_eff": 6.67
+    }
+   },
+   {
+    "id": "05",
+    "title": "Эмпатия и клиентоориентированность",
+    "section": "Ведение и завершение диалога",
+    "type": "bool",
+    "weight": 15,
+    "na": false,
+    "allowed": [
+     "Да",
+     "Нет"
+    ],
+    "original": {
+     "answer": "Да",
+     "explanation": "Тон вежливый [4], [8].",
+     "evidence": [
+      4,
+      8
+     ]
+    },
+    "final_answer": "Да",
+    "appeal": null,
+    "score_original": {
+     "applicable": true,
+     "points": 15.0,
+     "weight_eff": 20.0,
+     "points_eff": 20.0
+    },
+    "score_final": {
+     "applicable": true,
+     "points": 15.0,
+     "weight_eff": 20.0,
+     "points_eff": 20.0
+    }
+   },
+   {
+    "id": "06",
+    "title": "Управление диалогом, скорость и грамотность",
+    "section": "Ведение и завершение диалога",
+    "type": "scale",
+    "weight": 15,
+    "na": false,
+    "allowed": [
+     "10",
+     "7",
+     "4",
+     "0"
+    ],
+    "original": {
+     "answer": "7",
+     "explanation": "Один заметный сбой: вместо ответа — личное предложение [6], клиент переспросил [7].",
+     "evidence": [
+      6,
+      7
+     ]
+    },
+    "final_answer": "10",
+    "appeal": {
+     "id": 2,
+     "comment": "Клиент переспросил из-за сути предложения, а не из-за формулировок — реплики понятные.",
+     "status": "changed",
+     "new_answer": "10",
+     "reason": "Согласен: реплики оператора ясные, сбой — в содержании (учтён в 04 и 08), а не в ведении диалога.",
+     "created_at": "2026-11-07T16:22:00",
+     "decided_at": "2026-11-07T16:30:00"
+    },
+    "score_original": {
+     "applicable": true,
+     "points": 10.5,
+     "weight_eff": 20.0,
+     "points_eff": 14.0
+    },
+    "score_final": {
+     "applicable": true,
+     "points": 15.0,
+     "weight_eff": 20.0,
+     "points_eff": 20.0
+    }
+   },
+   {
+    "id": "07",
+    "title": "Завершение",
+    "section": "Ведение и завершение диалога",
+    "type": "bool",
+    "weight": 5,
+    "na": true,
+    "allowed": [
+     "Да",
+     "Нет",
+     "N/A"
+    ],
+    "original": {
+     "answer": "N/A",
+     "explanation": "Клиент покинул чат [10] сразу после своей реплики — завершить диалог оператор не успел.",
+     "evidence": [
+      9,
+      10
+     ]
+    },
+    "final_answer": "N/A",
+    "appeal": null,
+    "score_original": {
+     "applicable": false,
+     "points": 0.0,
+     "weight_eff": 0.0,
+     "points_eff": 0.0
+    },
+    "score_final": {
+     "applicable": false,
+     "points": 0.0,
+     "weight_eff": 0.0,
+     "points_eff": 0.0
+    }
+   },
+   {
+    "id": "08",
+    "title": "Грубые ошибки",
+    "section": "Грубые нарушения",
+    "type": "flag",
+    "weight": 0,
+    "na": false,
+    "allowed": [
+     "Да",
+     "Нет"
+    ],
+    "original": {
+     "answer": "Да",
+     "explanation": "Оператор предложил платную консультацию лично за 5 000 ₸ и попросил номер клиента [6] — услуга в обход компании; подтвердил это [8].",
+     "evidence": [
+      6,
+      8
+     ]
+    },
+    "final_answer": "Да",
+    "appeal": null,
+    "score_original": {
+     "applicable": false,
+     "points": 0.0,
+     "weight_eff": 0.0,
+     "points_eff": 0.0
+    },
+    "score_final": {
+     "applicable": false,
+     "points": 0.0,
+     "weight_eff": 0.0,
+     "points_eff": 0.0
+    }
+   }
+  ],
+  "original": {
+   "total": 54.0,
+   "gross": true,
+   "sections": [
+    {
+     "name": "Начало и понимание запроса",
+     "ids": [
+      "01",
+      "02"
+     ],
+     "points_eff": 13.33,
+     "max_eff": 33.33,
+     "percent": 40.0
+    },
+    {
+     "name": "Безопасность и решение",
+     "ids": [
+      "03",
+      "04"
+     ],
+     "points_eff": 6.67,
+     "max_eff": 26.67,
+     "percent": 25.0
+    },
+    {
+     "name": "Ведение и завершение диалога",
+     "ids": [
+      "05",
+      "06",
+      "07"
+     ],
+     "points_eff": 34.0,
+     "max_eff": 40.0,
+     "percent": 85.0
+    },
+    {
+     "name": "Грубые нарушения",
+     "ids": [
+      "08"
+     ],
+     "points_eff": 0.0,
+     "max_eff": 0.0,
+     "percent": null
+    }
+   ]
+  },
+  "final": {
+   "total": 60.0,
+   "gross": true,
+   "sections": [
+    {
+     "name": "Начало и понимание запроса",
+     "ids": [
+      "01",
+      "02"
+     ],
+     "points_eff": 13.33,
+     "max_eff": 33.33,
+     "percent": 40.0
+    },
+    {
+     "name": "Безопасность и решение",
+     "ids": [
+      "03",
+      "04"
+     ],
+     "points_eff": 6.67,
+     "max_eff": 26.67,
+     "percent": 25.0
+    },
+    {
+     "name": "Ведение и завершение диалога",
+     "ids": [
+      "05",
+      "06",
+      "07"
+     ],
+     "points_eff": 40.0,
+     "max_eff": 40.0,
+     "percent": 100.0
+    },
+    {
+     "name": "Грубые нарушения",
+     "ids": [
+      "08"
+     ],
+     "points_eff": 0.0,
+     "max_eff": 0.0,
+     "percent": null
+    }
+   ]
+  }
+ },
+ {
+  "id": 5,
+  "run_id": 1,
+  "conversation_id": "demo-ru-call-001",
+  "checklist": {
+   "id": 1,
+   "name": "Чек-лист качества чатов",
+   "version": 1,
+   "label": "Чек-лист качества чатов · v1"
+  },
+  "provider": "haiku",
+  "model": "claude-haiku-5-5",
+  "prompt_version": "p1",
+  "created_at": "2026-11-07T16:05:19",
+  "latency_s": 10.3,
+  "input_tokens": 2280,
+  "output_tokens": 1550,
+  "cost_usd": 0.001003,
+  "status": "ok",
+  "error": null,
+  "pii_masked": [
+   {
+    "n": 5,
+    "type": "iin",
+    "label": "[ИИН скрыт]"
+   }
+  ],
+  "criteria": [
+   {
+    "id": "01",
+    "title": "Установление контакта",
+    "section": "Начало и понимание запроса",
+    "type": "bool",
+    "weight": 10,
+    "na": false,
+    "allowed": [
+     "Да",
+     "Нет"
+    ],
+    "original": {
+     "answer": "Да",
+     "explanation": "Первая реплика оператора [2]: приветствие и имя (Дана).",
+     "evidence": [
+      2
+     ]
+    },
+    "final_answer": "Да",
+    "appeal": null,
+    "score_original": {
+     "applicable": true,
+     "points": 10.0,
+     "weight_eff": 11.76,
+     "points_eff": 11.76
+    },
+    "score_final": {
+     "applicable": true,
+     "points": 10.0,
+     "weight_eff": 11.76,
+     "points_eff": 11.76
+    }
+   },
+   {
+    "id": "02",
+    "title": "Выявление потребности",
+    "section": "Начало и понимание запроса",
+    "type": "bool",
+    "weight": 15,
+    "na": true,
+    "allowed": [
+     "Да",
+     "Нет",
+     "N/A"
+    ],
+    "original": {
+     "answer": "N/A",
+     "explanation": "Клиент сразу описал проблему [3] — данных для ответа хватало.",
+     "evidence": [
+      3
+     ]
+    },
+    "final_answer": "N/A",
+    "appeal": null,
+    "score_original": {
+     "applicable": false,
+     "points": 0.0,
+     "weight_eff": 0.0,
+     "points_eff": 0.0
+    },
+    "score_final": {
+     "applicable": false,
+     "points": 0.0,
+     "weight_eff": 0.0,
+     "points_eff": 0.0
+    }
+   },
+   {
+    "id": "03",
+    "title": "Идентификация",
+    "section": "Безопасность и решение",
+    "type": "bool",
+    "weight": 20,
+    "na": true,
+    "allowed": [
+     "Да",
+     "Нет",
+     "N/A"
+    ],
+    "original": {
+     "answer": "Да",
+     "explanation": "Оператор запросил ИИН [4]; система подтвердила личность [6] до сброса пароля [7].",
+     "evidence": [
+      4,
+      6,
+      7
+     ]
+    },
+    "final_answer": "Да",
+    "appeal": null,
+    "score_original": {
+     "applicable": true,
+     "points": 20.0,
+     "weight_eff": 23.53,
+     "points_eff": 23.53
+    },
+    "score_final": {
+     "applicable": true,
+     "points": 20.0,
+     "weight_eff": 23.53,
+     "points_eff": 23.53
+    }
+   },
+   {
+    "id": "04",
+    "title": "Корректная и полная консультация",
+    "section": "Безопасность и решение",
+    "type": "scale",
+    "weight": 20,
+    "na": true,
+    "allowed": [
+     "20",
+     "15",
+     "10",
+     "5",
+     "0",
+     "N/A"
+    ],
+    "original": {
+     "answer": "20",
+     "explanation": "Отправлена ссылка для сброса [7], клиент подтвердил, что вошёл [8].",
+     "evidence": [
+      7,
+      8
+     ]
+    },
+    "final_answer": "20",
+    "appeal": null,
+    "score_original": {
+     "applicable": true,
+     "points": 20.0,
+     "weight_eff": 23.53,
+     "points_eff": 23.53
+    },
+    "score_final": {
+     "applicable": true,
+     "points": 20.0,
+     "weight_eff": 23.53,
+     "points_eff": 23.53
+    }
+   },
+   {
+    "id": "05",
+    "title": "Эмпатия и клиентоориентированность",
+    "section": "Ведение и завершение диалога",
+    "type": "bool",
+    "weight": 15,
+    "na": false,
+    "allowed": [
+     "Да",
+     "Нет"
+    ],
+    "original": {
+     "answer": "Да",
+     "explanation": "Оператор выразил понимание [4] и был вежлив.",
+     "evidence": [
+      4,
+      11
+     ]
+    },
+    "final_answer": "Да",
+    "appeal": null,
+    "score_original": {
+     "applicable": true,
+     "points": 15.0,
+     "weight_eff": 17.65,
+     "points_eff": 17.65
+    },
+    "score_final": {
+     "applicable": true,
+     "points": 15.0,
+     "weight_eff": 17.65,
+     "points_eff": 17.65
+    }
+   },
+   {
+    "id": "06",
+    "title": "Управление диалогом, скорость и грамотность",
+    "section": "Ведение и завершение диалога",
+    "type": "scale",
+    "weight": 15,
+    "na": false,
+    "allowed": [
+     "10",
+     "7",
+     "4",
+     "0"
+    ],
+    "original": {
+     "answer": "7",
+     "explanation": "Один сбой: перед проверкой личности [4]–[6] оператор не предупредил об ожидании.",
+     "evidence": [
+      4,
+      6
+     ]
+    },
+    "final_answer": "7",
+    "appeal": null,
+    "score_original": {
+     "applicable": true,
+     "points": 10.5,
+     "weight_eff": 17.65,
+     "points_eff": 12.35
+    },
+    "score_final": {
+     "applicable": true,
+     "points": 10.5,
+     "weight_eff": 17.65,
+     "points_eff": 12.35
+    }
+   },
+   {
+    "id": "07",
+    "title": "Завершение",
+    "section": "Ведение и завершение диалога",
+    "type": "bool",
+    "weight": 5,
+    "na": true,
+    "allowed": [
+     "Да",
+     "Нет",
+     "N/A"
+    ],
+    "original": {
+     "answer": "Да",
+     "explanation": "Предложил дальнейшую помощь [9] и попрощался [11].",
+     "evidence": [
+      9,
+      11
+     ]
+    },
+    "final_answer": "Да",
+    "appeal": null,
+    "score_original": {
+     "applicable": true,
+     "points": 5.0,
+     "weight_eff": 5.88,
+     "points_eff": 5.88
+    },
+    "score_final": {
+     "applicable": true,
+     "points": 5.0,
+     "weight_eff": 5.88,
+     "points_eff": 5.88
+    }
+   },
+   {
+    "id": "08",
+    "title": "Грубые ошибки",
+    "section": "Грубые нарушения",
+    "type": "flag",
+    "weight": 0,
+    "na": false,
+    "allowed": [
+     "Да",
+     "Нет"
+    ],
+    "original": {
+     "answer": "Нет",
+     "explanation": "Нарушений нет; ИИН запрошен для проверки личности.",
+     "evidence": [
+      4
+     ]
+    },
+    "final_answer": "Нет",
+    "appeal": null,
+    "score_original": {
+     "applicable": false,
+     "points": 0.0,
+     "weight_eff": 0.0,
+     "points_eff": 0.0
+    },
+    "score_final": {
+     "applicable": false,
+     "points": 0.0,
+     "weight_eff": 0.0,
+     "points_eff": 0.0
+    }
+   }
+  ],
+  "original": {
+   "total": 94.71,
+   "gross": false,
+   "sections": [
+    {
+     "name": "Начало и понимание запроса",
+     "ids": [
+      "01",
+      "02"
+     ],
+     "points_eff": 11.76,
+     "max_eff": 11.76,
+     "percent": 100.0
+    },
+    {
+     "name": "Безопасность и решение",
+     "ids": [
+      "03",
+      "04"
+     ],
+     "points_eff": 47.06,
+     "max_eff": 47.06,
+     "percent": 100.0
+    },
+    {
+     "name": "Ведение и завершение диалога",
+     "ids": [
+      "05",
+      "06",
+      "07"
+     ],
+     "points_eff": 35.88,
+     "max_eff": 41.18,
+     "percent": 87.14
+    },
+    {
+     "name": "Грубые нарушения",
+     "ids": [
+      "08"
+     ],
+     "points_eff": 0.0,
+     "max_eff": 0.0,
+     "percent": null
+    }
+   ]
+  },
+  "final": {
+   "total": 94.71,
+   "gross": false,
+   "sections": [
+    {
+     "name": "Начало и понимание запроса",
+     "ids": [
+      "01",
+      "02"
+     ],
+     "points_eff": 11.76,
+     "max_eff": 11.76,
+     "percent": 100.0
+    },
+    {
+     "name": "Безопасность и решение",
+     "ids": [
+      "03",
+      "04"
+     ],
+     "points_eff": 47.06,
+     "max_eff": 47.06,
+     "percent": 100.0
+    },
+    {
+     "name": "Ведение и завершение диалога",
+     "ids": [
+      "05",
+      "06",
+      "07"
+     ],
+     "points_eff": 35.88,
+     "max_eff": 41.18,
+     "percent": 87.14
+    },
+    {
+     "name": "Грубые нарушения",
+     "ids": [
+      "08"
+     ],
+     "points_eff": 0.0,
+     "max_eff": 0.0,
+     "percent": null
+    }
+   ]
+  }
+ }
+]

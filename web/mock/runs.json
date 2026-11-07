@@ -1,0 +1,63 @@
+[
+ {
+  "id": 1,
+  "status": "done",
+  "checklist_id": 1,
+  "checklist_label": "Чек-лист качества чатов · v1",
+  "provider": "haiku",
+  "model": "claude-haiku-5-5",
+  "dataset_id": "DEMO",
+  "total": 5,
+  "done": 5,
+  "failed": 0,
+  "cost_usd": 0.004593,
+  "created_at": "2026-11-07T16:05:10",
+  "finished_at": "2026-11-07T16:05:21",
+  "tokens_in": 9930,
+  "tokens_out": 7200,
+  "avg_latency_s": 8.56,
+  "items": [
+   {
+    "conversation_id": "demo-ru-001",
+    "status": "ok",
+    "evaluation_id": 1,
+    "total": 100.0,
+    "gross": false,
+    "error": null
+   },
+   {
+    "conversation_id": "demo-kz-001",
+    "status": "ok",
+    "evaluation_id": 2,
+    "total": 56.25,
+    "gross": false,
+    "error": null
+   },
+   {
+    "conversation_id": "demo-en-001",
+    "status": "ok",
+    "evaluation_id": 3,
+    "total": 100.0,
+    "gross": false,
+    "error": null
+   },
+   {
+    "conversation_id": "demo-ru-002",
+    "status": "ok",
+    "evaluation_id": 4,
+    "total": 54.0,
+    "gross": true,
+    "error": null
+   },
+   {
+    "conversation_id": "demo-ru-call-001",
+    "status": "ok",
+    "evaluation_id": 5,
+    "total": 94.71,
+    "gross": false,
+    "error": null
+   }
+  ],
+  "avg_cost_per_eval": 0.000919
+ }
+]

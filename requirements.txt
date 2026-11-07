@@ -1,0 +1,9 @@
+# Для запуска без uv: pip install -r requirements.txt (то же, что в pyproject.toml)
+fastapi>=0.115
+uvicorn>=0.30
+httpx>=0.27
+python-multipart>=0.0.9
+pydantic>=2.7
+anthropic>=0.70
+openai>=1.50
+pytest>=8

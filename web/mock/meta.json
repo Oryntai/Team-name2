@@ -1,0 +1,30 @@
+{
+ "providers": [
+  {
+   "id": "haiku",
+   "label": "Claude Haiku 5.5",
+   "model": "claude-haiku-5-5",
+   "available": true,
+   "price_in": 0.1,
+   "price_out": 0.5
+  },
+  {
+   "id": "sonnet",
+   "label": "Claude Sonnet 5.5",
+   "model": "claude-sonnet-5-5",
+   "available": true,
+   "price_in": 2.0,
+   "price_out": 10.0
+  },
+  {
+   "id": "local",
+   "label": "Локальная модель",
+   "model": "local",
+   "available": false,
+   "price_in": 0,
+   "price_out": 0
+  }
+ ],
+ "default_provider": "haiku",
+ "dataset_url_configured": true
+}

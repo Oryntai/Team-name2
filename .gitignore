@@ -11,3 +11,4 @@ runs/
 var/
 .claude/
 CLAUDE.md
+!.env.example

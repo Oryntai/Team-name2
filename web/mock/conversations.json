@@ -1,0 +1,454 @@
+[
+ {
+  "id": "demo-ru-001",
+  "dataset_id": "DEMO",
+  "channel": "agent chat",
+  "language": "RU",
+  "audio_src": null,
+  "transcript": [
+   {
+    "n": 1,
+    "timestamp": "00:00",
+    "speaker": "client",
+    "text": "Здравствуйте, хочу вывести деньги с брокерского счёта на карту.",
+    "audio_offset": null,
+    "pii": []
+   },
+   {
+    "n": 2,
+    "timestamp": "00:02",
+    "speaker": "bot",
+    "text": "Здравствуйте! Я виртуальный помощник. Продолжая диалог, вы соглашаетесь на обработку персональных данных.",
+    "audio_offset": null,
+    "pii": []
+   },
+   {
+    "n": 3,
+    "timestamp": "00:05",
+    "speaker": "bot",
+    "text": "Соединяю вас с оператором, пожалуйста, подождите.",
+    "audio_offset": null,
+    "pii": []
+   },
+   {
+    "n": 4,
+    "timestamp": "00:06",
+    "speaker": "system",
+    "text": "Чат передан оператору.",
+    "audio_offset": null,
+    "pii": []
+   },
+   {
+    "n": 5,
+    "timestamp": "00:41",
+    "speaker": "operator",
+    "text": "Здравствуйте! Меня зовут Алия. Чтобы посмотреть ваш счёт, сначала подтвердим личность.",
+    "audio_offset": null,
+    "pii": []
+   },
+   {
+    "n": 6,
+    "timestamp": "00:55",
+    "speaker": "client",
+    "text": "Хорошо.",
+    "audio_offset": null,
+    "pii": []
+   },
+   {
+    "n": 7,
+    "timestamp": "01:20",
+    "speaker": "system",
+    "text": "Личность клиента подтверждена.",
+    "audio_offset": null,
+    "pii": []
+   },
+   {
+    "n": 8,
+    "timestamp": "01:34",
+    "speaker": "operator",
+    "text": "Спасибо. Вывод доступен в разделе «Кошелёк» → «Вывести». Деньги придут на карту в течение двух рабочих дней.",
+    "audio_offset": null,
+    "pii": []
+   },
+   {
+    "n": 9,
+    "timestamp": "01:58",
+    "speaker": "client",
+    "text": "А комиссия есть?",
+    "audio_offset": null,
+    "pii": []
+   },
+   {
+    "n": 10,
+    "timestamp": "02:20",
+    "speaker": "operator",
+    "text": "Брокер комиссию за вывод не берёт, банк-получатель может удержать свою. Подсказать что-нибудь ещё?",
+    "audio_offset": null,
+    "pii": []
+   },
+   {
+    "n": 11,
+    "timestamp": "02:41",
+    "speaker": "client",
+    "text": "Нет, спасибо.",
+    "audio_offset": null,
+    "pii": []
+   },
+   {
+    "n": 12,
+    "timestamp": "02:50",
+    "speaker": "operator",
+    "text": "Рада была помочь! Хорошего дня.",
+    "audio_offset": null,
+    "pii": []
+   },
+   {
+    "n": 13,
+    "timestamp": "02:51",
+    "speaker": "system",
+    "text": "Оператор закрыл чат.",
+    "audio_offset": null,
+    "pii": []
+   }
+  ]
+ },
+ {
+  "id": "demo-kz-001",
+  "dataset_id": "DEMO",
+  "channel": "agent chat",
+  "language": "KZ",
+  "audio_src": null,
+  "transcript": [
+   {
+    "n": 1,
+    "timestamp": "00:00",
+    "speaker": "client",
+    "text": "Сәлеметсіз бе, шотты толтырдым, бірақ ақша көрінбейді.",
+    "audio_offset": null,
+    "pii": []
+   },
+   {
+    "n": 2,
+    "timestamp": "00:03",
+    "speaker": "bot",
+    "text": "Сәлеметсіз бе! Мен виртуалды көмекшімін. Сізді операторға қосамын.",
+    "audio_offset": null,
+    "pii": []
+   },
+   {
+    "n": 3,
+    "timestamp": "00:04",
+    "speaker": "system",
+    "text": "Чат передан оператору.",
+    "audio_offset": null,
+    "pii": []
+   },
+   {
+    "n": 4,
+    "timestamp": "00:38",
+    "speaker": "operator",
+    "text": "Сәлеметсіз бе. Қай карта арқылы толтырдыңыз?",
+    "audio_offset": null,
+    "pii": []
+   },
+   {
+    "n": 5,
+    "timestamp": "01:02",
+    "speaker": "client",
+    "text": "Банк картасымен. Ақшаны кеше жібердім, әлі жоқ, қатты уайымдап отырмын.",
+    "audio_offset": null,
+    "pii": []
+   },
+   {
+    "n": 6,
+    "timestamp": "01:40",
+    "speaker": "operator",
+    "text": "Аударым бір жұмыс күні ішінде түседі. Күте тұрыңыз.",
+    "audio_offset": null,
+    "pii": []
+   },
+   {
+    "n": 7,
+    "timestamp": "02:05",
+    "speaker": "client",
+    "text": "Жақсы, рақмет.",
+    "audio_offset": null,
+    "pii": []
+   },
+   {
+    "n": 8,
+    "timestamp": "02:15",
+    "speaker": "operator",
+    "text": "Сау болыңыз!",
+    "audio_offset": null,
+    "pii": []
+   },
+   {
+    "n": 9,
+    "timestamp": "02:16",
+    "speaker": "system",
+    "text": "Оператор закрыл чат.",
+    "audio_offset": null,
+    "pii": []
+   }
+  ]
+ },
+ {
+  "id": "demo-en-001",
+  "dataset_id": "DEMO",
+  "channel": "agent chat",
+  "language": "EN",
+  "audio_src": null,
+  "transcript": [
+   {
+    "n": 1,
+    "timestamp": "00:00",
+    "speaker": "client",
+    "text": "Hi",
+    "audio_offset": null,
+    "pii": []
+   },
+   {
+    "n": 2,
+    "timestamp": "00:02",
+    "speaker": "bot",
+    "text": "Hello! I'm the virtual assistant. How can I help you?",
+    "audio_offset": null,
+    "pii": []
+   },
+   {
+    "n": 3,
+    "timestamp": "00:30",
+    "speaker": "client",
+    "text": "operator please",
+    "audio_offset": null,
+    "pii": []
+   },
+   {
+    "n": 4,
+    "timestamp": "00:31",
+    "speaker": "system",
+    "text": "Chat transferred to an agent.",
+    "audio_offset": null,
+    "pii": []
+   },
+   {
+    "n": 5,
+    "timestamp": "01:05",
+    "speaker": "operator",
+    "text": "Hello, my name is Sam. How can I help you today?",
+    "audio_offset": null,
+    "pii": []
+   },
+   {
+    "n": 6,
+    "timestamp": "02:40",
+    "speaker": "system",
+    "text": "The customer left the chat.",
+    "audio_offset": null,
+    "pii": []
+   }
+  ]
+ },
+ {
+  "id": "demo-ru-002",
+  "dataset_id": "DEMO",
+  "channel": "agent chat",
+  "language": "RU",
+  "audio_src": null,
+  "transcript": [
+   {
+    "n": 1,
+    "timestamp": "00:00",
+    "speaker": "client",
+    "text": "Подскажите, какие облигации сейчас выгоднее купить?",
+    "audio_offset": null,
+    "pii": []
+   },
+   {
+    "n": 2,
+    "timestamp": "00:03",
+    "speaker": "bot",
+    "text": "Соединяю с оператором.",
+    "audio_offset": null,
+    "pii": []
+   },
+   {
+    "n": 3,
+    "timestamp": "00:04",
+    "speaker": "system",
+    "text": "Чат передан оператору.",
+    "audio_offset": null,
+    "pii": []
+   },
+   {
+    "n": 4,
+    "timestamp": "00:35",
+    "speaker": "operator",
+    "text": "Здравствуйте, меня зовут Ерлан. Подборку облигаций можно посмотреть в приложении, раздел «Облигации».",
+    "audio_offset": null,
+    "pii": []
+   },
+   {
+    "n": 5,
+    "timestamp": "01:10",
+    "speaker": "client",
+    "text": "Там много всего, хочу совет.",
+    "audio_offset": null,
+    "pii": []
+   },
+   {
+    "n": 6,
+    "timestamp": "01:42",
+    "speaker": "operator",
+    "text": "Могу проконсультировать лично за 5 000 ₸, оставьте свой номер — позвоню вечером.",
+    "audio_offset": null,
+    "pii": []
+   },
+   {
+    "n": 7,
+    "timestamp": "02:05",
+    "speaker": "client",
+    "text": "Эм, а так можно?",
+    "audio_offset": null,
+    "pii": []
+   },
+   {
+    "n": 8,
+    "timestamp": "02:30",
+    "speaker": "operator",
+    "text": "Да, многие так делают.",
+    "audio_offset": null,
+    "pii": []
+   },
+   {
+    "n": 9,
+    "timestamp": "03:10",
+    "speaker": "client",
+    "text": "Ладно, я подумаю.",
+    "audio_offset": null,
+    "pii": []
+   },
+   {
+    "n": 10,
+    "timestamp": "03:12",
+    "speaker": "system",
+    "text": "Клиент покинул чат.",
+    "audio_offset": null,
+    "pii": []
+   }
+  ]
+ },
+ {
+  "id": "demo-ru-call-001",
+  "dataset_id": "DEMO",
+  "channel": "voice call",
+  "language": "RU",
+  "audio_src": "mock:audio",
+  "transcript": [
+   {
+    "n": 1,
+    "timestamp": "2026-11-05T09:12:00.0000000+00:00",
+    "speaker": "system",
+    "text": "Запись разговора запущена",
+    "audio_offset": 0.0,
+    "pii": []
+   },
+   {
+    "n": 2,
+    "timestamp": "2026-11-05T09:12:01.5000000+00:00",
+    "speaker": "operator",
+    "text": "Добрый день, служба поддержки, меня зовут Дана. Чем могу помочь?",
+    "audio_offset": 1.5,
+    "pii": []
+   },
+   {
+    "n": 3,
+    "timestamp": "2026-11-05T09:12:06.2000000+00:00",
+    "speaker": "client",
+    "text": "Здравствуйте. Не могу войти в приложение, пишет, что пароль неверный.",
+    "audio_offset": 6.2,
+    "pii": []
+   },
+   {
+    "n": 4,
+    "timestamp": "2026-11-05T09:12:12.0000000+00:00",
+    "speaker": "operator",
+    "text": "Понимаю, это неприятно. Для начала подтвердим личность: назовите, пожалуйста, ваш ИИН.",
+    "audio_offset": 12.0,
+    "pii": []
+   },
+   {
+    "n": 5,
+    "timestamp": "2026-11-05T09:12:18.4000000+00:00",
+    "speaker": "client",
+    "text": "Да, конечно: 900101300123.",
+    "audio_offset": 18.4,
+    "pii": [
+     {
+      "start": 13,
+      "end": 25,
+      "type": "iin",
+      "label": "[ИИН скрыт]"
+     }
+    ]
+   },
+   {
+    "n": 6,
+    "timestamp": "2026-11-05T09:12:22.0000000+00:00",
+    "speaker": "system",
+    "text": "Личность клиента подтверждена",
+    "audio_offset": 22.0,
+    "pii": []
+   },
+   {
+    "n": 7,
+    "timestamp": "2026-11-05T09:12:24.5000000+00:00",
+    "speaker": "operator",
+    "text": "Спасибо. Я отправила ссылку для сброса пароля на вашу почту, проверьте, пожалуйста.",
+    "audio_offset": 24.5,
+    "pii": []
+   },
+   {
+    "n": 8,
+    "timestamp": "2026-11-05T09:12:33.0000000+00:00",
+    "speaker": "client",
+    "text": "Пришло… сейчас попробую. Всё, вошёл.",
+    "audio_offset": 33.0,
+    "pii": []
+   },
+   {
+    "n": 9,
+    "timestamp": "2026-11-05T09:12:45.1000000+00:00",
+    "speaker": "operator",
+    "text": "Отлично. Могу ещё чем-то помочь?",
+    "audio_offset": 45.1,
+    "pii": []
+   },
+   {
+    "n": 10,
+    "timestamp": "2026-11-05T09:12:48.0000000+00:00",
+    "speaker": "client",
+    "text": "Нет, спасибо.",
+    "audio_offset": 48.0,
+    "pii": []
+   },
+   {
+    "n": 11,
+    "timestamp": "2026-11-05T09:12:50.2000000+00:00",
+    "speaker": "operator",
+    "text": "Хорошего дня, до свидания!",
+    "audio_offset": 50.2,
+    "pii": []
+   },
+   {
+    "n": 12,
+    "timestamp": "2026-11-05T09:12:53.0000000+00:00",
+    "speaker": "system",
+    "text": "Запись разговора остановлена",
+    "audio_offset": 53.0,
+    "pii": []
+   }
+  ]
+ }
+]
