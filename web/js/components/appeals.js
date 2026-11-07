@@ -3,7 +3,7 @@ import { CqaElement } from '../base.js';
 import { appealReasonLabel } from '../appeal-reasons.js';
 import {
   esc, icon, fmtScore, fmtDateTime, fmtTs, answerTone, answerLabel, evidenceLabel, linkifyRefs, ROLE_LABEL,
-  toast, getRole, setRole, emit, navigate,
+  toast, getRole, emit, navigate,
 } from '../util.js';
 
 const CONTEXT = 2;
@@ -53,9 +53,6 @@ class Appeals extends CqaElement {
     this.innerHTML = `
       <div class="cqa-page-head">
         <div><h1>Апелляции</h1></div>
-        <div class="cqa-page-actions">${getRole() === 'reviewer'
-    ? `<span class="cqa-badge cqa-badge--mint cqa-badge--lg">${icon('shield')}Проверяющий</span>`
-    : `<button type="button" class="cqa-btn cqa-btn--accent" data-act="be-reviewer">${icon('shield')}Я проверяющий</button>`}</div>
       </div>
       <div class="cqa-appeals-grid">
         <aside class="cqa-panel cqa-appeal-queue">
@@ -197,8 +194,7 @@ class Appeals extends CqaElement {
     }
     if (getRole() !== 'reviewer') {
       return `<div class="cqa-block-title">Решение</div>
-        <div class="cqa-note cqa-note--warn" style="display:flex;gap:12px;align-items:center;flex-wrap:wrap">${icon('info')}<span style="flex:1">Решение принимает проверяющий.</span>
-          <button type="button" class="cqa-btn cqa-btn--sm" data-act="be-reviewer">${icon('shield')}Я проверяющий</button></div>`;
+        <div class="cqa-note cqa-note--warn" style="display:flex;gap:12px;align-items:center">${icon('info')}<span style="flex:1">Решение принимает проверяющий — переключите роль вверху справа.</span></div>`;
     }
     const current = a.current_answer ?? c.final_answer ?? c.original?.answer;
     const allowed = (c.allowed || []).filter((x) => x !== current);
@@ -237,7 +233,6 @@ class Appeals extends CqaElement {
     const item = t.closest('.cqa-appeal-item');
     if (item) { this.select(item.dataset.id); history.replaceState(null, '', `#/appeals?id=${encodeURIComponent(item.dataset.id)}`); return; }
     const act = t.closest('[data-act]')?.dataset.act;
-    if (act === 'be-reviewer') { setRole('reviewer'); this.render(); if (this.s.detail) this.renderDetail(); return; }
     if (act === 'next') {
       const id = this.nextOpenId();
       if (id != null) { this.s.tab = 'open'; this.render(); this.select(id); history.replaceState(null, '', `#/appeals?id=${encodeURIComponent(id)}`); }

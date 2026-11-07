@@ -41,12 +41,11 @@ class Ask extends CqaElement {
     this.innerHTML = ` ${compact ? '' : `<div class="cqa-page-head"><div><h1>Спросить ИИ</h1>
       <div class="cqa-page-sub">Ответ по оценённым диалогам со ссылками на карточки.</div></div></div>`}
       <div class="cqa-ask-entry"><form class="cqa-ask-form">
-        <div class="cqa-ask-compose"><input aria-label="Вопрос по диалогам" class="cqa-input" data-part="question" name="question" maxlength="4000" required autocomplete="off" placeholder="${compact ? 'Спросить ИИ о диалогах…' : 'Что хотите узнать по диалогам?'}">
+        <div class="cqa-ask-compose"><input aria-label="Вопрос по диалогам" class="cqa-input" data-part="question" name="question" maxlength="4000" required autocomplete="off" placeholder="Спросите ИИ о диалогах, например: где операторы раскрывали данные без проверки личности?">
           <button class="cqa-btn cqa-btn--primary" type="submit" data-part="submit">${icon('spark')}Спросить</button></div>
         ${compact ? '' : `<button type="button" class="cqa-btn cqa-btn--ghost cqa-btn--sm" data-ask-toggle aria-expanded="false">${icon('right')}Набор и чек-лист</button>
         <div class="cqa-ask-reveal" inert aria-hidden="true"><div><div class="cqa-ask-filters" data-part="filters"></div></div></div>`}
       </form>
-      <div class="cqa-ask-examples">${EXAMPLES.map((text, i) => `<button type="button" class="cqa-btn cqa-btn--ghost" data-example="${i}">${esc(compact ? ['Данные без проверки?', 'Темы с низким баллом?', 'Что забывают?', 'Где сомнения?'][i] : text)}</button>`).join('')}</div></div>
       <div class="cqa-ask-result" data-part="result" role="status" aria-live="polite" aria-atomic="true"></div>`;
     this.listen(this, 'click', (event) => {
       const toggle = event.target.closest('[data-ask-toggle]');
