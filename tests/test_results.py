@@ -186,6 +186,22 @@ def test_model_modes(db):
     assert rs.model_block([], "haiku") == {"mode": "external_api", "name": MODEL}
 
 
+def test_export_takes_only_requested_model(db):
+    """Облако и своя модель в одной базе: в файл идут только ответы модели из --provider, без смешения."""
+    own_model = "qwen3.5-9b-cqa"
+    add(db, "c1", ans=answers(ALL))
+    add(db, "c1", provider="local", model=own_model, ans=answers({**ALL, "01": "Нет"}, model=own_model))  # новее
+    add(db, "c2", provider="local", model=own_model, ans=answers(ALL, model=own_model))
+    cloud = rs.build(db, ["c1", "c2"], CFG, "Команда", provider="haiku")
+    own = rs.build(db, ["c1", "c2"], CFG, "Команда", provider="local")
+    assert cloud["model"] == {"mode": "external_api", "name": MODEL}
+    assert cloud["results"][0]["criteria"][0]["value"] is True  # ответ Haiku, а не более новый ответ своей модели
+    assert cloud["results"][1]["status"] == "error"  # Haiku этот диалог не оценивал
+    assert own["model"] == {"mode": "local", "name": own_model}
+    assert own["results"][0]["criteria"][0]["value"] is False
+    assert [r["status"] for r in own["results"]] == ["ok", "ok"]
+
+
 def test_cli_prod_end_to_end_from_file(tmp_path, monkeypatch):
     """Контрольный час одной командой: файл набора → оценка (заглушка) → results.json → проверка."""
     monkeypatch.setenv("CQA_ALLOW_FAKE", "1")

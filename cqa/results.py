@@ -236,9 +236,13 @@ def eligible(ev: dict, config: dict, allow_fake: bool = False) -> bool:
 
 
 def pick(db: DB, cid: str, config: dict, allow_fake: bool = False,
-         min_id: int = 0) -> tuple[dict | None, dict | None]:
-    """(последняя годная оценка, последняя оценка вообще) — вторая нужна для причины ошибки."""
-    evs = [e for e in db.evaluations_for(cid) if e["id"] > min_id]  # новые первыми; min_id — для --fresh
+         min_id: int = 0, provider: str | None = None) -> tuple[dict | None, dict | None]:
+    """(последняя годная оценка, последняя оценка вообще) — вторая нужна для причины ошибки.
+
+    provider — только оценки этой модели: облачный файл и файл своей модели из одной базы не смешиваются.
+    """
+    evs = [e for e in db.evaluations_for(cid)  # новые первыми; min_id — для --fresh
+           if e["id"] > min_id and (provider is None or e.get("provider") == provider)]
     return next((e for e in evs if eligible(e, config, allow_fake)), None), (evs[0] if evs else None)
 
 
@@ -293,7 +297,7 @@ def build(db: DB, ids: list[str], config: dict, team: str, provider: str = "haik
     turns = turn_counts(db, ids)
     results, used = [], []
     for cid in ids:
-        ev, last = pick(db, cid, config, allow_fake, min_id)
+        ev, last = pick(db, cid, config, allow_fake, min_id, provider)
         results.append(record(cid, ev, last, config, turns.get(cid, 0)))
         if ev:
             used.append(ev)
@@ -399,7 +403,7 @@ async def _run_set(args) -> int:
     min_id = db.one("SELECT COALESCE(MAX(id), 0) AS m FROM evaluations")["m"] if args.fresh else 0
     if not args.no_evaluate:
         for _ in range(2):  # второй заход — для диалогов, не прошедших и после повторов внутри прогона
-            todo = [cid for cid in ids if pick(db, cid, config, allow_fake, min_id)[0] is None]
+            todo = [cid for cid in ids if pick(db, cid, config, allow_fake, min_id, args.provider)[0] is None]
             if not todo:
                 break
             await _evaluate(db, todo, checklist_id, args.provider)
