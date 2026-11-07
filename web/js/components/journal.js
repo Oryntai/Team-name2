@@ -36,7 +36,7 @@ class Journal extends CqaElement {
     const models = [...new Set(runs.map((r) => providerLabel(this.s.meta, r.provider, r.model)))];
     this.innerHTML = `
       <div class="cqa-page-head">
-        <div><div class="cqa-eyebrow">Корректность процесса</div><h1>Журнал прогонов</h1>
+        <div><h1>Журнал прогонов</h1>
           <div class="cqa-page-sub">Модель оценивает изменённые критерии, остальные ответы переносим по отпечаткам определений. Здесь — модель, чек-лист, вызовы, время, токены и стоимость.</div></div>
         <div class="cqa-page-actions"><button type="button" class="cqa-btn" data-act="reload">${icon('refresh')}Обновить</button></div>
       </div>

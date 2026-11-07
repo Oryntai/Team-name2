@@ -578,9 +578,9 @@ cqa-card { container-type: inline-size; container-name: cqa-card; }
   .cqa-editor-head { grid-template-columns: minmax(0, 1fr); }
   .cqa-header-in { gap: 14px; }
   .cqa-role > span:first-child { display: none; }
-  .cqa-nav a .cqa-nav-text { display: none; }
 }
 @media (max-width: 760px) {
+  .cqa-nav a .cqa-nav-text { display: none; }
   .cqa-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .cqa-ec-body { grid-template-columns: minmax(0, 1fr); }
   .cqa-span-2, .cqa-span-3, .cqa-span-4 { grid-column: 1 / -1; }
@@ -591,3 +591,10 @@ cqa-card { container-type: inline-size; container-name: cqa-card; }
 @media (prefers-reduced-motion: reduce) {
   .cqa-scope *, cqa-app * { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
 }
+
+/* экран «Диалоги»: одна строка фильтров и запуска, сводка в подзаголовке */
+.cqa-toolbar { justify-content: space-between; align-items: center; }
+.cqa-toolbar-run { margin-left: auto; }
+.cqa-sub-alert { color: var(--cqa-red-700, #b42318); font-weight: 600; }
+.cqa-toolbar .cqa-select { width: auto; max-width: 260px; }
+.cqa-btn[hidden] { display: none; }

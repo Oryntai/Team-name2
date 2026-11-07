@@ -112,7 +112,7 @@ class ChecklistEditor extends CqaElement {
   render() {
     this.innerHTML = `
       <div class="cqa-page-head">
-        <div><div class="cqa-eyebrow">Контур 1 · Настройка</div><h1>Чек-лист</h1>
+        <div><h1>Чек-лист</h1>
           <div class="cqa-page-sub">Критерии, формулировки, веса, типы ответа, N/A и шкалы. Каждое сохранение — новая версия; из неё модель получает и инструкции, и строгую схему ответа.</div></div>
       </div>
       <div class="cqa-editor-grid">

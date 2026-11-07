@@ -76,17 +76,14 @@ class ConversationList extends CqaElement {
     this.innerHTML = `
       <div class="cqa-page-head">
         <div>
-          <div class="cqa-eyebrow">Контур 1 · Оценка</div>
           <h1>Диалоги</h1>
           <div class="cqa-page-sub" data-part="sub">${this.subtitle(ds)}</div>
         </div>
         <div class="cqa-page-actions">
-          <button type="button" class="cqa-btn" data-act="upload" title="Файл в формате API организаторов, список записей или одна запись">${icon('upload')}Загрузить JSON</button>
-          <button type="button" class="cqa-btn cqa-btn--primary" data-act="import">${icon('download')}Импорт по group_id</button>
+          <button type="button" class="cqa-btn cqa-btn--primary" data-act="import">${icon('download')}Загрузить диалоги</button>
           <input type="file" accept=".json,application/json" hidden data-part="file">
         </div>
       </div>
-      <div class="cqa-kpis" data-part="kpis"></div>
       <div data-part="run"></div>
       <div class="cqa-panel">
         <div class="cqa-toolbar" data-part="toolbar"></div>
@@ -99,27 +96,27 @@ class ConversationList extends CqaElement {
   }
 
   subtitle(ds) {
-    if (!this.s.datasets.length) return 'Наборов пока нет — импортируйте DEV по group_id или загрузите JSON-файл.';
+    if (!this.s.datasets.length) return 'Диалогов пока нет — нажмите «Загрузить диалоги».';
     const n = this.s.rows.length;
-    const what = ds ? `Набор <b>${esc(ds.id)}</b>` : 'Все наборы';
-    return `${what} · ${fmtInt(n)} ${plural(n, 'диалог', 'диалога', 'диалогов')}${ds?.fetched_at ? ` · загружен ${esc(fmtDateTime(ds.fetched_at))}` : ''}. Откройте диалог, чтобы увидеть оценку, обоснования и реплики-доказательства.`;
+    return `${ds ? `Набор <b>${esc(ds.id)}</b>` : 'Все наборы'} · ${fmtInt(n)} ${plural(n, 'диалог', 'диалога', 'диалогов')}`;
   }
 
   renderKpis(rows) {
-    const el = this.part('kpis');
+    const el = this.part('sub');
     if (!el) return;
+    const ds = this.s.datasets.find((d) => d.id === this.s.dataset);
+    if (!this.s.datasets.length) { el.innerHTML = this.subtitle(ds); return; }
     const evald = rows.filter((r) => r.latest && r.latest.status !== 'error');
     const totals = evald.map((r) => finalTotal(r.latest)).filter((x) => x != null);
     const avg = totals.length ? totals.reduce((a, b) => a + b, 0) / totals.length : null;
     const gross = evald.filter((r) => finalGross(r.latest)).length;
     const open = rows.reduce((a, r) => a + (r.appeals?.open || 0), 0);
-    const calls = rows.filter((r) => isCall(r.channel)).length;
-    el.innerHTML = `
-      <div class="cqa-kpi"><div class="cqa-kpi-label">${icon('chat')}Диалогов</div><div class="cqa-kpi-value">${fmtInt(rows.length)} <small>${fmtInt(rows.length - calls)} ${plural(rows.length - calls, 'чат', 'чата', 'чатов')} · ${fmtInt(calls)} ${plural(calls, 'звонок', 'звонка', 'звонков')}</small></div></div>
-      <div class="cqa-kpi"><div class="cqa-kpi-label">${icon('check')}Оценено</div><div class="cqa-kpi-value">${fmtInt(evald.length)} <small>из ${fmtInt(rows.length)}</small></div></div>
-      <div class="cqa-kpi"><div class="cqa-kpi-label">${icon('scale')}Средний итог</div><div class="cqa-kpi-value">${avg == null ? '—' : fmtScore(avg)} <small>из 100</small></div></div>
-      <div class="cqa-kpi ${gross ? 'cqa-kpi--alert' : ''}"><div class="cqa-kpi-label">${icon('alert')}Грубые ошибки</div><div class="cqa-kpi-value">${fmtInt(gross)} <small>${gross ? plural(gross, 'диалог', 'диалога', 'диалогов') : 'не найдено'}</small></div></div>
-      <div class="cqa-kpi ${open ? 'cqa-kpi--warn' : ''}"><div class="cqa-kpi-label">${icon('gavel')}Открытые апелляции</div><div class="cqa-kpi-value">${fmtInt(open)} <small>${open ? '<a class="cqa-link" href="#/appeals">к рассмотрению →</a>' : 'нет'}</small></div></div>`;
+    const parts = [`${ds ? `Набор <b>${esc(ds.id)}</b>` : 'Все наборы'} · ${fmtInt(rows.length)} ${plural(rows.length, 'диалог', 'диалога', 'диалогов')}`];
+    if (evald.length < rows.length) parts.push(`оценено ${fmtInt(evald.length)}`);
+    if (avg != null) parts.push(`средний итог <b>${fmtScore(avg)}</b> из 100`);
+    if (gross) parts.push(`<span class="cqa-sub-alert">грубые ошибки — ${fmtInt(gross)}</span>`);
+    if (open) parts.push(`<a class="cqa-link" href="#/appeals">ждут решения: ${fmtInt(open)} ${plural(open, 'апелляция', 'апелляции', 'апелляций')} →</a>`);
+    el.innerHTML = parts.join(' · ');
   }
 
   renderToolbar() {
@@ -131,29 +128,25 @@ class ConversationList extends CqaElement {
     const seg = (f, items, cur) => `<div class="cqa-segctl" data-seg="${f}" role="group">${items.map(([v, l]) => `<button type="button" data-v="${esc(v)}" aria-pressed="${v === cur}">${esc(l)}</button>`).join('')}</div>`;
     const busy = this.runActive();
     const providers = meta?.providers || [];
+    const nsel = this.s.selected.size;
     el.innerHTML = `
       <div class="cqa-toolbar-group">
-        <label class="cqa-field"><span class="cqa-label">Набор</span>
-          <select class="cqa-select cqa-select--sm" data-f="dataset">
+        ${datasets.length > 1 ? `<select class="cqa-select cqa-select--sm" data-f="dataset" aria-label="Набор">
             <option value="all" ${this.s.dataset === 'all' ? 'selected' : ''}>Все наборы</option>
             ${datasets.map((d) => `<option value="${esc(d.id)}" ${d.id === this.s.dataset ? 'selected' : ''}>${esc(d.id)} · ${fmtInt(d.total)}</option>`).join('')}
-          </select></label>
-        <div class="cqa-field"><span class="cqa-label">Язык</span>${seg('lang', [['all', 'Все'], ...[...langs, ...extra].map((l) => [l, l])], this.s.lang)}</div>
-        <div class="cqa-field"><span class="cqa-label">Канал</span>${seg('channel', [['all', 'Все'], ['chat', 'Чаты'], ['call', 'Звонки']], this.s.channel)}</div>
-        <div class="cqa-field"><span class="cqa-label">Поиск</span><div class="cqa-search">${icon('search')}<input class="cqa-input cqa-input--sm" data-f="q" placeholder="ID диалога" value="${esc(this.s.q)}"></div></div>
+          </select>` : ''}
+        ${seg('lang', [['all', 'Все языки'], ...[...langs, ...extra].map((l) => [l, l])], this.s.lang)}
+        ${seg('channel', [['all', 'Все'], ['chat', 'Чаты'], ['call', 'Звонки']], this.s.channel)}
+        <div class="cqa-search">${icon('search')}<input class="cqa-input cqa-input--sm" data-f="q" placeholder="Поиск по ID" value="${esc(this.s.q)}"></div>
       </div>
-      </div>
-      <div class="cqa-runbar">
-        <div class="cqa-runbar-text">${icon('spark')}<div><b>Оценка оператора</b><span>Модель оценивает изменённые критерии; итог считает код по формуле чек-листа.</span></div></div>
-        <label class="cqa-field"><span class="cqa-label">Чек-лист</span>
-          <select class="cqa-select cqa-select--sm" data-f="checklist" ${busy ? 'disabled' : ''}>
-            ${[...checklists].sort((a, b) => b.id - a.id).map((c) => `<option value="${c.id}" ${c.id === this.s.checklistId ? 'selected' : ''}>${esc(checklistLabel(c))}</option>`).join('') || '<option value="">нет чек-листов</option>'}
-          </select></label>
-        <label class="cqa-field"><span class="cqa-label">Модель</span>
-          <select class="cqa-select cqa-select--sm" data-f="provider" ${busy ? 'disabled' : ''}>
-            ${providers.map((p) => `<option value="${esc(p.id)}" ${p.id === this.s.provider ? 'selected' : ''} ${p.available === false ? 'disabled' : ''}>${esc(p.label || p.id)}${p.available === false ? ' — не настроена' : ''}</option>`).join('')}
-          </select></label>
-        <button type="button" class="cqa-btn" data-act="run-selected" ${busy ? 'disabled' : ''}>Оценить выбранные <span class="cqa-num" data-part="sel-count">(0)</span></button>
+      <div class="cqa-toolbar-group cqa-toolbar-run">
+        <select class="cqa-select cqa-select--sm" data-f="checklist" aria-label="Чек-лист" title="Версия чек-листа" ${busy ? 'disabled' : ''}>
+          ${[...checklists].sort((a, b) => b.id - a.id).map((c) => `<option value="${c.id}" ${c.id === this.s.checklistId ? 'selected' : ''}>${esc(checklistLabel(c))}</option>`).join('') || '<option value="">нет чек-листов</option>'}
+        </select>
+        <select class="cqa-select cqa-select--sm" data-f="provider" aria-label="Модель" title="Модель" ${busy ? 'disabled' : ''}>
+          ${providers.map((p) => `<option value="${esc(p.id)}" ${p.id === this.s.provider ? 'selected' : ''} ${p.available === false ? 'disabled' : ''}>${esc(p.label || p.id)}${p.available === false ? ' — не настроена' : ''}</option>`).join('')}
+        </select>
+        <button type="button" class="cqa-btn" data-act="run-selected" ${nsel ? '' : 'hidden'} ${busy ? 'disabled' : ''}>Оценить выбранные <span class="cqa-num" data-part="sel-count">(${nsel})</span></button>
         <button type="button" class="cqa-btn cqa-btn--primary" data-act="run-all" ${busy ? 'disabled' : ''}>${icon('play')}Оценить все <span class="cqa-num" data-part="all-count">(0)</span></button>
       </div>`;
   }
@@ -161,17 +154,17 @@ class ConversationList extends CqaElement {
   renderTable() {
     const rows = this.filtered();
     this.renderKpis(rows);
-    const sub = this.part('sub');
-    if (sub) sub.innerHTML = this.subtitle(this.s.datasets.find((d) => d.id === this.s.dataset));
     const wrap = this.part('table');
     if (!wrap) return;
     const all = this.part('all-count'), sel = this.part('sel-count');
     if (all) all.textContent = `(${rows.length})`;
     if (sel) sel.textContent = `(${this.s.selected.size})`;
+    const selBtn = this.querySelector('[data-act="run-selected"]');
+    if (selBtn) selBtn.hidden = !this.s.selected.size;
     if (!this.s.rows.length) {
       wrap.innerHTML = `<div class="cqa-empty"><div class="cqa-empty-icon">${icon('db')}</div><h3>Диалогов пока нет</h3>
         <p>Импортируйте набор из API организаторов по group_id (например, DEV) или загрузите JSON-файл с транскриптами.</p>
-        <div class="cqa-row" style="justify-content:center"><button type="button" class="cqa-btn cqa-btn--primary" data-act="import">${icon('download')}Импорт по group_id</button><button type="button" class="cqa-btn" data-act="upload">${icon('upload')}Загрузить JSON</button></div></div>`;
+        <div class="cqa-row" style="justify-content:center"><button type="button" class="cqa-btn cqa-btn--primary" data-act="import">${icon('download')}Загрузить диалоги</button></div></div>`;
       return;
     }
     if (!rows.length) {
@@ -187,7 +180,7 @@ class ConversationList extends CqaElement {
       <thead><tr>
         <th class="cqa-col-check"><input type="checkbox" class="cqa-check" data-f="all" ${allSel ? 'checked' : ''} aria-label="Выбрать все"></th>
         <th>${sortBtn('id', 'Диалог')}</th><th>Канал</th><th>${sortBtn('language', 'Язык')}</th>
-        <th class="cqa-col-right">${sortBtn('total', 'Итог')}</th><th>Отметки</th><th>Чек-лист</th><th>Оценка</th><th></th>
+        <th class="cqa-col-right">${sortBtn('total', 'Итог')}</th><th>Отметки</th><th></th>
       </tr></thead>
       <tbody>${rows.map((r) => this.rowHtml(r)).join('')}</tbody></table>`;
   }
@@ -198,7 +191,9 @@ class ConversationList extends CqaElement {
     const running = item && (item.status === 'pending' || item.status === 'running');
     const ft = finalTotal(l);
     let score;
-    if (!l) score = '<span class="cqa-score" data-tone="none">—</span>';
+    if (running) score = `<span class="cqa-status cqa-status--run"><span class="cqa-spinner"></span>${item.status === 'running' ? 'оценивается' : 'в очереди'}</span>`;
+    else if (item?.status === 'error') score = `<span class="cqa-status cqa-status--err" title="${esc(item.error || '')}"><span class="cqa-dot"></span>ошибка</span>`;
+    else if (!l) score = '<span class="cqa-faint">не оценён</span>';
     else if (l.status === 'error') score = '<span class="cqa-badge cqa-badge--no">ошибка</span>';
     else {
       score = `<span class="cqa-score" data-tone="${scoreTone(ft)}">${fmtScore(ft)}</span>`;
@@ -210,11 +205,6 @@ class ConversationList extends CqaElement {
     if (finalGross(l)) marks.push(`<span class="cqa-badge cqa-badge--gross">${icon('alert')}Грубая ошибка</span>`);
     if (r.appeals?.open) marks.push(`<span class="cqa-badge cqa-badge--warn">${icon('gavel')}${r.appeals.open} ${plural(r.appeals.open, 'апелляция', 'апелляции', 'апелляций')}</span>`);
     if (r.appeals?.decided) marks.push(`<span class="cqa-badge cqa-badge--mint">${icon('check')}решено: ${r.appeals.decided}</span>`);
-    let when;
-    if (running) when = `<span class="cqa-status cqa-status--run"><span class="cqa-spinner"></span>${item.status === 'running' ? 'оценивается' : 'в очереди'}</span>`;
-    else if (item?.status === 'error') when = `<span class="cqa-status cqa-status--err" title="${esc(item.error || '')}"><span class="cqa-dot"></span>ошибка</span>`;
-    else if (l) when = `<span class="cqa-muted">${esc(fmtDateTime(l.created_at))}</span>`;
-    else when = '<span class="cqa-faint">не оценён</span>';
     const sel = this.s.selected.has(r.id);
     const meta = [r.n_replies != null ? `${fmtInt(r.n_replies)} ${plural(r.n_replies, 'реплика', 'реплики', 'реплик')}` : '', fmtDuration(r.duration)].filter(Boolean).join(' · ');
     return `<tr class="is-clickable ${sel ? 'is-selected' : ''} ${running ? 'is-running' : ''}" data-id="${esc(r.id)}">
@@ -224,8 +214,6 @@ class ConversationList extends CqaElement {
       <td><span class="cqa-lang">${esc((r.language || '—').toUpperCase())}</span></td>
       <td class="cqa-col-right">${score}</td>
       <td><div class="cqa-marks">${marks.join('') || '<span class="cqa-faint">—</span>'}</div></td>
-      <td class="cqa-muted cqa-nowrap">${l ? esc(shortChecklist(l.checklist_label)) : '—'}</td>
-      <td class="cqa-nowrap">${when}</td>
       <td class="cqa-faint">${icon('right')}</td>
     </tr>`;
   }
@@ -324,15 +312,15 @@ class ConversationList extends CqaElement {
     const configured = !!this.s.meta?.dataset_url_configured;
     return `<dialog class="cqa-dialog" data-part="import-dialog" aria-labelledby="cqa-import-title">
       <form data-form="import">
-        <div class="cqa-dialog-head"><span class="cqa-empty-icon" style="width:36px;height:36px;margin:0;border-radius:10px">${icon('download')}</span><h2 id="cqa-import-title">Импорт набора из API организаторов</h2></div>
+        <div class="cqa-dialog-head"><span class="cqa-empty-icon" style="width:36px;height:36px;margin:0;border-radius:10px">${icon('download')}</span><h2 id="cqa-import-title">Загрузить диалоги</h2></div>
         <div class="cqa-dialog-body">
-          <label class="cqa-field"><span class="cqa-label">Код набора (group_id)</span>
+          <label class="cqa-field"><span class="cqa-label">Код набора из API организаторов (group_id)</span>
             <input class="cqa-input" name="group_id" required placeholder="например, DEV" value="${esc(this.s.dataset && this.s.dataset !== 'all' ? this.s.dataset : 'DEV')}" autocomplete="off"></label>
           ${configured
     ? `<details class="cqa-details"><summary>${icon('right')}Указать другую ссылку API</summary>
               <label class="cqa-field" style="margin-top:8px"><span class="cqa-label">Ссылка GET из гайда организаторов <small>необязательно</small></span><input class="cqa-input" name="url" placeholder="https://…" autocomplete="off"></label></details>`
     : `<label class="cqa-field"><span class="cqa-label">Ссылка GET из гайда организаторов <small>сохранится на сервере; подпись в интерфейсе не показываем</small></span><input class="cqa-input" name="url" required placeholder="https://…" autocomplete="off"></label>`}
-          <div class="cqa-note cqa-note--mint">Запрос идёт через наш сервер (без CORS). Исходные метки времени и порядок реплик сохраняются без изменений. Повторный импорт того же group_id обновит диалоги.</div>
+          <div class="cqa-row" style="align-items:center;gap:8px"><span class="cqa-muted">или</span><button type="button" class="cqa-btn cqa-btn--sm" data-act="upload">${icon('upload')}выбрать JSON-файл</button></div>
           <div data-part="import-error"></div>
         </div>
         <div class="cqa-dialog-foot">
@@ -391,7 +379,7 @@ class ConversationList extends CqaElement {
       e.preventDefault();
       if (act === 'import') { const d = this.part('import-dialog'); this.part('import-error').innerHTML = ''; d.showModal(); d.querySelector('input[name=group_id]')?.select(); }
       else if (act === 'import-cancel') this.part('import-dialog')?.close();
-      else if (act === 'upload') this.part('file')?.click();
+      else if (act === 'upload') { this.part('import-dialog')?.close(); this.part('file')?.click(); }
       else if (act === 'run-all') this.startRun(this.filtered().map((r) => r.id));
       else if (act === 'run-selected') this.startRun(this.s.rows.filter((r) => this.s.selected.has(r.id)).map((r) => r.id));
       else if (act === 'run-close') { this.s.run = null; this.renderRun(); }
@@ -425,6 +413,7 @@ class ConversationList extends CqaElement {
       if (t.checked) this.s.selected.add(t.dataset.sel); else this.s.selected.delete(t.dataset.sel);
       t.closest('tr')?.classList.toggle('is-selected', t.checked);
       const sel = this.part('sel-count'); if (sel) sel.textContent = `(${this.s.selected.size})`;
+      const selBtn = this.querySelector('[data-act="run-selected"]'); if (selBtn) selBtn.hidden = !this.s.selected.size;
       const allBox = this.querySelector('[data-f="all"]');
       if (allBox) allBox.checked = this.filtered().every((r) => this.s.selected.has(r.id));
       return;
@@ -443,12 +432,6 @@ class ConversationList extends CqaElement {
   onSubmit(e) {
     if (e.target.dataset.form === 'import') { e.preventDefault(); this.doImport(e.target); }
   }
-}
-
-function shortChecklist(label) {
-  if (!label) return '—';
-  const m = /v(\d+)\s*$/.exec(label);
-  return m ? `v${m[1]}` : label;
 }
 
 customElements.define('cqa-conversation-list', ConversationList);

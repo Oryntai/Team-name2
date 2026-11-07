@@ -51,7 +51,7 @@ class Appeals extends CqaElement {
     const open = this.s.list.filter((a) => a.status === 'open').length;
     this.innerHTML = `
       <div class="cqa-page-head">
-        <div><div class="cqa-eyebrow">Контур 2 · Работа с результатом</div><h1>Апелляции</h1>
+        <div><h1>Апелляции</h1>
           <div class="cqa-page-sub">Оператор оспаривает критерий в карточке диалога; проверяющий изучает доказательства, подтверждает или меняет оценку — итог пересчитывается.</div></div>
         <div class="cqa-page-actions">${getRole() === 'reviewer'
     ? `<span class="cqa-badge cqa-badge--mint cqa-badge--lg">${icon('shield')}Вы — проверяющий</span>`
