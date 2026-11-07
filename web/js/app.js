@@ -18,7 +18,6 @@ const NAV = [
   { key: 'analytics', href: '#/analytics', label: 'Аналитика', icon: 'scale' },
   { key: 'checklist', href: '#/checklist', label: 'Чек-лист', icon: 'checklist' },
   { key: 'journal', href: '#/journal', label: 'Журнал', icon: 'journal' },
-  { key: 'ask', href: '#/ask', label: 'Спросить', icon: 'spark' },
 ];
 
 export function parseHash() {
@@ -96,10 +95,11 @@ class CqaApp extends CqaElement {
       el = document.createElement('cqa-appeals');
       if (params.get('id')) el.setAttribute('appeal-id', params.get('id'));
       nav = 'appeals';
-    } else if (head === 'analytics') {
+    } else if (head === 'analytics' || head === 'ask') {
       el = document.createElement('cqa-analytics');
-      if (params.get('dataset_id')) el.setAttribute('dataset-id', params.get('dataset_id'));
-      if (params.get('checklist_id')) el.setAttribute('checklist-id', params.get('checklist_id'));
+      if (params.get('dataset_id') || params.get('dataset')) el.setAttribute('dataset-id', params.get('dataset_id') || params.get('dataset'));
+      if (params.get('checklist_id') || params.get('checklist')) el.setAttribute('checklist-id', params.get('checklist_id') || params.get('checklist'));
+      if (head === 'ask') el.setAttribute('focus-ask', '');
       nav = 'analytics';
     } else if (head === 'checklist') {
       el = document.createElement('cqa-checklist-editor');
@@ -108,11 +108,6 @@ class CqaApp extends CqaElement {
     } else if (head === 'journal') {
       el = document.createElement('cqa-journal');
       nav = 'journal';
-    } else if (head === 'ask') {
-      el = document.createElement('cqa-ask');
-      if (params.get('dataset')) el.setAttribute('dataset-id', params.get('dataset'));
-      if (params.get('checklist')) el.setAttribute('checklist-id', params.get('checklist'));
-      nav = 'ask';
     } else {
       el = document.createElement('cqa-conversation-list');
       if (params.get('dataset')) el.setAttribute('dataset', params.get('dataset'));
