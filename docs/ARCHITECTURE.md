@@ -1,0 +1,167 @@
+# CQA — архитектура и контракт
+
+Прототип Conversation Quality Analytics: ИИ оценивает работу оператора контакт-центра по настраиваемому
+чек-листу, показывает обоснования со ссылками на реплики, принимает апелляции и решения проверяющего.
+
+## Поток данных
+
+```
+API организаторов (GET ?group_id=…) ─┐
+Загрузка JSON-файла ─────────────────┴─► импорт ─► SQLite (диалоги, исходные метки времени без изменений)
+                                                     │
+          чек-лист (версия) ─────────────────────────┤
+                                                     ▼
+                       маскировка ПДн (ИИН, карты, телефоны, e-mail, IBAN) — модель их не видит
+                                                     ▼
+                       судья: один вызов модели на диалог, строгая JSON-схема из чек-листа
+                       (Claude Haiku 5.5 по умолчанию; Sonnet; своя локальная модель — OpenAI-совместимый API)
+                                                     ▼
+                       по каждому критерию: ответ, обоснование, номера реплик-доказательств
+                                                     ▼
+                       итог — кодом по формуле чек-листа (N/A → перераспределение веса, округление 2 знака,
+                       грубая ошибка — отдельная отметка) ─► карточка ─► апелляция ─► решение ─► пересчёт
+```
+
+Модель решает только смысл (что ответить по критерию и на какие реплики опереться). Код — только арифметику,
+которую задаёт сам чек-лист, и хранение. Каждая оценка — живой вызов модели с записью в журнал
+(модель, версия промпта и чек-листа, время, токены, цена). Готовых ответов по id диалога нет.
+
+## Модули
+
+| Путь | Что | Кто пишет |
+|---|---|---|
+| `cqa/checklist.py` | формат чек-листа, проверка, допустимые ответы | ядро |
+| `cqa/scoring.py` | итог, секции, перераспределение N/A, грубая ошибка | ядро |
+| `cqa/pii.py` | маскировка личных данных перед моделью | ядро |
+| `cqa/judge/` | промпт и JSON-схема из чек-листа, провайдеры моделей, `evaluate()` | ядро |
+| `cqa/checklists/default.json` | начальная конфигурация (PDF организаторов) | ядро |
+| `cqa/db.py` | SQLite: схема и запросы | сервер |
+| `cqa/sources.py` | импорт из API организаторов и из файла | сервер |
+| `cqa/audio.py` | прокси записи звонка (CORS, свежая подписанная ссылка), смещение реплики в записи | сервер |
+| `cqa/runner.py` | пакетные прогоны в фоне, прогресс, журнал | сервер |
+| `cqa/api.py`, `cqa/__main__.py` | FastAPI, раздача `web/` | сервер |
+| `web/` | интерфейс: HTML/CSS/JS без сборки, веб-компоненты `cqa-*` | интерфейс |
+| `tests/` | `test_techspec.py` (правила из ТЗ), `test_pii.py`, `test_api.py` | ядро / сервер |
+| `lab/` | исследования: пробы моделей, медный эталон, замеры | — |
+
+Запуск: `uv run python -m cqa` → http://127.0.0.1:8000. Данные — `var/cqa.db` (в git не идёт).
+
+## Чек-лист (JSON)
+
+```json
+{
+  "name": "Чек-лист качества чатов",
+  "description": "Начальная конфигурация из PDF организаторов",
+  "rounding": 2,
+  "rules": ["общие правила для модели (памятка со стр. 3)", "..."],
+  "criteria": [
+    {"id": "01", "section": "Начало и понимание запроса", "title": "Установление контакта",
+     "type": "bool", "weight": 10, "na": false,
+     "yes": "оператор поздоровался на языке клиента и представился в первом ответе.",
+     "no": "", "na_when": "", "steps": [], "guidance": ""},
+    {"id": "04", "section": "Безопасность и решение", "title": "Корректная и полная консультация",
+     "type": "scale", "weight": 20, "na": true, "yes": "оцените ответ или следующий шаг по шкале.",
+     "na_when": "чат закончился до того, как клиент сформулировал запрос.",
+     "steps": [{"value": 20, "text": "Все существенные вопросы закрыты…"}, {"value": 0, "text": "…"}]},
+    {"id": "08", "section": "Грубые нарушения", "title": "Грубые ошибки", "type": "flag", "weight": 0, "na": false,
+     "yes": "выявлено оскорбление клиента…", "no": "ни одно из трёх не выявлено."}
+  ]
+}
+```
+
+- `type`: `bool` (Да/Нет), `scale` (ступени `steps`, верхняя ступень = полный вес), `flag` (грубая ошибка: «Да» = нарушение, без баллов, `weight` = 0).
+- `na`: разрешён ли N/A; `na_when` — условие (обязательно, если `na`).
+- Секции — по полю `section` в порядке первого появления. `guidance` — необязательное пояснение для модели.
+- Ответы везде строки: `"Да"`, `"Нет"`, `"N/A"`, ступень шкалы — `"15"`.
+- Версии неизменяемы: правка в интерфейсе = новая версия (`parent_id` → от какой версии).
+
+## Итог (`cqa/scoring.py`, правила стр. 2 чек-листа)
+
+1. N/A — только где разрешён. 2. Да = полный вес, Нет = 0; шкала — только указанные ступени.
+3. Баллы шкалы = вес × ступень / верхняя ступень. 4. N/A исключаем, веса применимых масштабируем до 100.
+5. Итог округляем до `rounding` знаков (половина вверх, Decimal); нет применимых критериев с весом → итога нет.
+Грубая ошибка — отдельная отметка, итог не обнуляет. Секция: баллы её критериев после перераспределения /
+её максимум после перераспределения × 100. Пример из ТЗ: 02 и 03 N/A, 06 = 7, остальное Да / 20 → 93,08.
+
+`score(config, answers) -> {"total", "gross", "gross_ids", "applicable_weight",
+"criteria": {id: {"answer", "applicable", "weight", "points", "weight_eff", "points_eff"}},
+"sections": [{"name", "ids", "points_eff", "max_eff", "percent"}]}`
+
+## Судья (`cqa/judge`)
+
+- Реплики нумеруются с 1 в порядке массива (метки времени не сортируем: бывают одинаковые). Модель видит
+  `[n] timestamp speaker: text`, бот и системные события — как контекст.
+- JSON-схема строится из чек-листа: объект `criteria` с ключом на каждый критерий, у ответа `enum` из допустимых
+  значений этого критерия → модель физически не может вернуть недопустимый ответ.
+  По критерию: `explanation` (коротко, по-русски, со ссылками [n]), `answer`, `evidence` (номера реплик; при «Нет» —
+  участок, где действие ожидалось).
+- `evaluate(record, config, provider) -> {"status", "error", "answers": {id: {"answer", "explanation", "evidence"}},
+  "provider", "model", "prompt_version", "latency_s", "input_tokens", "output_tokens", "cost_usd", "pii_masked", "raw"}`.
+- Провайдеры: `haiku` (claude-haiku-5-5), `sonnet` (claude-sonnet-5-5), `local` (OpenAI-совместимый сервер:
+  `CQA_LOCAL_BASE_URL`, `CQA_LOCAL_MODEL`), `fake` — только для тестов, в интерфейсе не показывается.
+
+## База (SQLite, `var/cqa.db`)
+
+```
+settings(key PK, value)
+datasets(id PK, source, fetched_at, total)
+conversations(id PK, dataset_id, channel, language, transcript JSON, audio_url, imported_at)
+checklists(id PK, name, version, parent_id, note, config JSON, created_at)
+runs(id PK, created_at, finished_at, status, checklist_id, provider, model, total, done, failed, cost_usd)
+evaluations(id PK, run_id, conversation_id, checklist_id, created_at, provider, model, prompt_version, status, error,
+            latency_s, input_tokens, output_tokens, cost_usd, answers JSON, pii_masked JSON, raw, total, gross)
+appeals(id PK, evaluation_id, criterion_id, comment, created_at, status open|confirmed|changed,
+        new_answer, reason, decided_at)
+```
+Финальные ответы = ответы модели, поверх — решения проверяющего со статусом `changed`. Итог считается заново
+из ответов при каждом чтении (`scoring.score`), в `evaluations.total` — исходный итог для списка.
+
+## HTTP API (`/api`, JSON)
+
+| Метод и путь | Тело / параметры | Ответ |
+|---|---|---|
+| `GET /api/meta` | — | `{"providers": [{"id","label","model","available","price_in","price_out"}], "default_provider", "dataset_url_configured"}` |
+| `GET /api/settings` / `PUT /api/settings` | `{"dataset_url"?, "default_provider"?}` | `{"dataset_url_configured", "dataset_url_hint", "default_provider"}` (подпись ссылки не отдаём) |
+| `GET /api/datasets` | — | `[{"id","source","fetched_at","total"}]` |
+| `POST /api/datasets/import` | `{"group_id", "url"?}` | `{"dataset_id","imported","total"}` |
+| `POST /api/datasets/upload` | multipart `file` (формат API организаторов, список записей или одна запись) | то же |
+| `GET /api/conversations` | `?dataset_id=&language=&channel=` | `[{"id","dataset_id","channel","language","n_replies","duration","latest": {"evaluation_id","checklist_id","checklist_label","status","total","final_total","gross","created_at"} \| null, "appeals": {"open","decided"}}]` |
+| `GET /api/conversations/{id}` | — | `{"id","dataset_id","channel","language","audio_src" \| null, "transcript": [{"n","timestamp","speaker","text","audio_offset" \| null,"pii": [{"start","end","type","label"}]}], "evaluations": [{"evaluation_id","checklist_label","provider","model","created_at","status","total","final_total","gross"}]}` |
+| `GET /api/evaluations/{id}` | — | см. ниже |
+| `POST /api/runs` | `{"conversation_ids"?: [...], "dataset_id"?, "checklist_id", "provider"}` | `{"run_id"}` (оценка идёт в фоне) |
+| `GET /api/runs/{id}` | — | `{"id","status","checklist_id","checklist_label","provider","model","total","done","failed","cost_usd","created_at","finished_at","items": [{"conversation_id","status","evaluation_id","total","gross","error"}]}` |
+| `GET /api/runs` | — | журнал: `[{… как выше без items, "avg_cost_per_eval","avg_latency_s","tokens_in","tokens_out"}]` |
+| `GET /api/checklists` | — | `[{"id","name","version","parent_id","note","created_at","n_criteria"}]` |
+| `GET /api/checklists/{id}` | — | `{"id","name","version","parent_id","note","created_at","config"}` |
+| `POST /api/checklists` | `{"config","note","parent_id"}` | `201 {"id","version"}` или `422 {"errors": [...]}` |
+| `POST /api/checklists/validate` | `{"config"}` | `{"ok","errors"}` |
+| `GET /api/appeals` | `?status=open\|decided\|all` | `[{"id","evaluation_id","conversation_id","criterion_id","criterion_title","original_answer","explanation","evidence","evidence_replies": [{"n","timestamp","speaker","text"}],"comment","status","new_answer","reason","created_at","decided_at","total_original","total_final"}]` |
+| `POST /api/appeals` | `{"evaluation_id","criterion_id","comment"}` | `201` апелляция; `409`, если по критерию уже есть открытая |
+| `POST /api/appeals/{id}/decision` | `{"decision": "confirm"\|"change", "new_answer"?, "reason"}` | `{"appeal", "evaluation"}` (оценка уже с новым итогом) |
+| `GET /api/audio/{conversation_id}` | заголовок `Range` | `audio/mpeg` (206 при Range) |
+
+`GET /api/evaluations/{id}`:
+```json
+{"id": 12, "run_id": 3, "conversation_id": "p1-ru-025",
+ "checklist": {"id": 1, "name": "…", "version": 1, "label": "Чек-лист качества чатов · v1"},
+ "provider": "haiku", "model": "claude-haiku-5-5", "prompt_version": "p1", "created_at": "…",
+ "latency_s": 8.9, "input_tokens": 2100, "output_tokens": 1500, "cost_usd": 0.00096,
+ "status": "ok", "error": null, "pii_masked": [{"n": 5, "type": "iin", "label": "[ИИН скрыт]"}],
+ "criteria": [
+   {"id": "04", "title": "…", "section": "…", "type": "scale", "weight": 20, "na": true, "allowed": ["20","15","10","5","0","N/A"],
+    "original": {"answer": "N/A", "explanation": "…", "evidence": [3, 4]},
+    "final_answer": "N/A",
+    "appeal": null,
+    "score_original": {"applicable": false, "points": 0, "weight_eff": 0, "points_eff": 0},
+    "score_final": {"applicable": false, "points": 0, "weight_eff": 0, "points_eff": 0}}
+ ],
+ "original": {"total": 93.08, "gross": false, "sections": [{"name": "…", "points_eff": 30.77, "max_eff": 38.46, "percent": 80.0}]},
+ "final": {"total": 93.08, "gross": false, "sections": ["…"]}}
+```
+
+## Интерфейс (`web/`)
+
+HTML/CSS/JS без сборки и без внешних CDN. Каждый экран — веб-компонент с атрибутом `api-base`, чтобы его
+можно было вставить веб-ресурсом в форму Dynamics 365: `<cqa-conversation-list>`, `<cqa-card conversation-id="…">`,
+`<cqa-appeals>`, `<cqa-checklist-editor>`, `<cqa-journal>`; `<cqa-app>` собирает их в приложение (маршруты по `#`).
+Роль («Оператор» / «Проверяющий») переключается в шапке, без входа: оператор подаёт апелляцию, проверяющий решает.

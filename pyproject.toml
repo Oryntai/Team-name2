@@ -1,0 +1,24 @@
+[project]
+name = "cqa"
+version = "0.1.0"
+description = "Conversation Quality Analytics: ИИ оценивает работу оператора контакт-центра по чек-листу, с апелляциями"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi>=0.115",
+    "uvicorn>=0.30",
+    "httpx>=0.27",
+    "python-multipart>=0.0.9",
+    "pydantic>=2.7",
+    "anthropic>=0.70",
+    "openai>=1.50",
+]
+
+[dependency-groups]
+dev = ["pytest>=8"]
+
+[tool.uv]
+package = false
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

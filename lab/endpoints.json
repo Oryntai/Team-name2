@@ -1,0 +1,6 @@
+{
+  "_note": "pay: card — списывается с карты (запрещено без --allow-card и слова владельца); credits — бесплатные кредиты Modal ($30/мес); free — бесплатно. price — $ за 1М токенов: вход, вход из кеша, выход.",
+  "kimi": {"url": "https://oryntai--ep-cqa-kimi31pro-server.us-west.modal.direct", "pay": "card", "price": [2.00, 0.20, 10.00], "status": "остановлен 7.11"},
+  "ds": {"url": "https://oryntai--ep-cqa-dsflash-server.us-west.modal.direct", "pay": "card", "price": [0.25, 0.005, 1.00], "status": "остановлен 7.11"},
+  "glm": {"url": "https://oryntai--ep-cqa-glm53-server.us-west.modal.direct", "pay": "card", "price": [1.40, 0.26, 4.40], "status": "остановлен 7.11"}
+}
