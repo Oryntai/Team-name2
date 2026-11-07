@@ -320,3 +320,93 @@ def test_existing_database_migration_preserves_evaluations(tmp_path):
         assert columns["precedents"]["dflt_value"] == "'[]'"
     finally:
         db.close()
+
+
+# --- поиск похожих на разных языках: по русскому переводу ---
+
+def lang_record(cid, language, client):
+    rec = record(cid, client)
+    rec["language"] = language
+    return rec
+
+
+@pytest.fixture
+def multilingual(tmp_path, monkeypatch):
+    cfg = load_default()
+    db = DB(tmp_path / "multi.db")
+    db.seed_default_checklist()
+    db.save_dataset("TEST", "fake", [
+        lang_record("kzq", "KZ", "Сәлеметсіз бе акция сатып алғым келеді"),
+        lang_record("kz_other", "KZ", "Сәлеметсіз бе құпиясөзді ұмыттым келеді"),
+        lang_record("ru_same", "RU", "Хочу купить акции какая комиссия")])
+    labels = {c["id"]: {"answer": "Да", "explanation": "Эталон."} for c in cfg["criteria"]}
+    reference = tmp_path / "reference.json"
+    reference.write_text(json.dumps({"dialogs": {cid: labels for cid in ("kz_other", "ru_same")}}))
+    monkeypatch.setattr(precedents, "REFERENCE", reference)
+    monkeypatch.setenv("CQA_PRECEDENTS", "1")
+    yield db, cfg
+    db.close()
+
+
+def translated(db, cid, client):
+    data = [{"turn": i, "text": t} for i, t in enumerate(
+        ["бот", client, "Здравствуйте! Меня зовут Анна.", "Чат закрыт"], 1)]
+    db.save_translation_call(cid, "fake", 0.0, data)
+
+
+def test_without_translation_similarity_is_by_original_text(multilingual):
+    db, cfg = multilingual
+    assert [p["conversation_id"] for p in precedents.select(db, db.record("kzq"), cfg)] == ["kz_other"]
+
+
+def test_translated_dialog_finds_same_topic_in_other_language(multilingual):
+    db, cfg = multilingual
+    translated(db, "kzq", "Здравствуйте хочу купить акции")
+    translated(db, "kz_other", "Здравствуйте забыл пароль хочу восстановить")
+    selected = precedents.select(db, db.record("kzq"), cfg)
+    assert [p["conversation_id"] for p in selected] == ["ru_same"]
+    # Перевод нужен только для поиска: в промпт идёт исходный транскрипт прецедента.
+    assert selected[0]["transcript"] == db.conversation("ru_same")["transcript"]
+
+
+def test_translation_of_wrong_length_is_ignored(multilingual):
+    db, cfg = multilingual
+    db.save_translation_call("kzq", "fake", 0.0, [{"turn": 1, "text": "хочу купить акции"}])
+    assert [p["conversation_id"] for p in precedents.select(db, db.record("kzq"), cfg)] == ["kz_other"]
+
+
+class _Cloud:
+    pid = "haiku"
+
+
+def test_prepare_translates_once_only_for_cloud(multilingual, monkeypatch):
+    db, cfg = multilingual
+    from cqa import translate
+    monkeypatch.setattr(judge, "available", lambda pid: True)
+    monkeypatch.setattr(judge, "get_provider", lambda pid: translate.FakeTranslationProvider())
+    assert asyncio.run(precedents.prepare(db, db.record("kzq"), FakeProvider("local"))) == (0.0, 0)
+    assert db.translation("kzq")["translation"] is None
+    cost, calls = asyncio.run(precedents.prepare(db, db.record("kzq"), _Cloud()))
+    assert calls == 1  # в цену оценки — только перевод самого диалога
+    assert db.translation("kzq")["translation"] and db.translation("kz_other")["translation"]
+    assert db.translation("ru_same")["translation"] is None  # русский не переводим
+    assert asyncio.run(precedents.prepare(db, db.record("kzq"), _Cloud())) == (0.0, 0)  # второй раз — бесплатно
+    monkeypatch.setenv("CQA_PRECEDENTS_TRANSLATE", "0")
+    db.save_dataset("TEST", "fake", [lang_record("enq", "EN", "I want to buy shares")])
+    assert asyncio.run(precedents.prepare(db, db.record("enq"), _Cloud())) == (0.0, 0)
+
+
+def test_prepare_failure_falls_back_without_raising(multilingual, monkeypatch):
+    db, cfg = multilingual
+
+    class Broken:
+        model = "broken"
+        pid = "haiku"
+
+        async def complete(self, *args, **kwargs):
+            raise judge.ProviderError("нет связи")
+
+    monkeypatch.setattr(judge, "available", lambda pid: True)
+    monkeypatch.setattr(judge, "get_provider", lambda pid: Broken())
+    assert asyncio.run(precedents.prepare(db, db.record("kzq"), _Cloud()))[1] == 1
+    assert [p["conversation_id"] for p in precedents.select(db, db.record("kzq"), cfg)] == ["kz_other"]

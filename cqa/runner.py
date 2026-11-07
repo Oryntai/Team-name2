@@ -71,11 +71,17 @@ class Runner:
         tokens_in = tokens_out = 0
         model = judge.model_name(provider.pid)
         only, reused = partition(config, model, previous, mode)
+        prep_cost, prep_calls = 0.0, 0
+        if only:
+            try:  # перевод для поиска похожих диалогов на других языках; сбой — ищем по исходному тексту
+                prep_cost, prep_calls = await precedents.prepare(self.db, rec, provider)
+            except Exception:  # noqa: BLE001
+                log.exception("prepare precedents %s", cid)
         examples = precedents.select(self.db, rec, config) if only else []
-        calls = 0
+        calls = prep_calls
         votes = self.votes if votes is None else votes
         raw_calls = []
-        cost = latency = 0.0
+        cost, latency = prep_cost, 0.0
         res = {"status": "ok", "error": None, "answers": {}, "model": model,
                "prompt_version": judge.PROMPT_VERSION, "pii_masked": (previous or {}).get("pii_masked", [])}
         for attempt in range(len(RETRY_PAUSES) + 1 if only else 0):

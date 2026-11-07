@@ -1,8 +1,16 @@
-"""Похожие утверждённые диалоги: эталон и решения проверяющих, без самоцитирования."""
+"""Похожие утверждённые диалоги: эталон и решения проверяющих, без самоцитирования.
+
+Похожесть считается по русскому тексту: казахские и английские диалоги сравниваются по переводу (если он есть
+в базе), поэтому к казахскому чату находится русский или английский диалог на ту же тему. Без перевода TF-IDF
+не видит, что «Жоғарыда жаздым» и «я же писал выше» — одно и то же, и подбирает диалог на чужую тему
+(замер 8.11 на 60 чатах DEV: у английских той же темы 3 из 30 соседей, с переводом — 28 из 30).
+"""
 from __future__ import annotations
 
+import asyncio
 from collections import Counter
 import json
+import logging
 import math
 import os
 from pathlib import Path
@@ -11,16 +19,72 @@ import re
 from .checklist import load_default
 from .incremental import fingerprints
 
+log = logging.getLogger("cqa.precedents")
 REFERENCE = Path(__file__).with_suffix("") / "dev_reference.json"
 # API различает подтверждённый и изменённый ответ; принимаем также общий статус decided.
 DECIDED = {"confirmed", "changed", "decided"}
 ROLE = {"client": "клиент", "operator": "оператор", "system": "событие"}
+_LOCKS: dict[tuple[int, str], asyncio.Lock] = {}
 
 
-def _words(record: dict) -> Counter:
-    text = " ".join(t.get("text", "") for t in record["transcript"]
+def _is_ru(language) -> bool:
+    return (language or "").strip().lower() == "ru"
+
+
+def _ru_texts(db, cid: str, transcript: list) -> list[str] | None:
+    """Перевод реплик на русский из базы (cqa/translate.py) или None, если его нет или он не по этому транскрипту."""
+    saved = db.translation(cid)["translation"]
+    if not saved or len(saved["data"]) != len(transcript):
+        return None
+    return [item.get("text", "") for item in saved["data"]]
+
+
+def _words(record: dict, texts: list[str] | None = None) -> Counter:
+    text = " ".join(texts[i] if texts else t.get("text", "") for i, t in enumerate(record["transcript"])
                     if t.get("speaker") in ("client", "operator"))
     return Counter(re.findall(r"\w+", text.lower()))
+
+
+async def prepare(db, record: dict, provider) -> tuple[float, int]:
+    """Переводит для поиска похожих оцениваемый диалог и диалоги пула не на русском, если перевода ещё нет.
+
+    Только для облачной модели: своя модель наружу ничего не отправляет и ищет похожие по исходному тексту.
+    Перевод сохраняется в базе (его же показывает карточка) и делается один раз. Возвращает цену и число вызовов.
+    Сбой перевода не мешает оценке: диалог сравнивается по исходному тексту.
+    """
+    from . import judge, translate
+    from .judge.providers import PROVIDERS
+
+    if os.environ.get("CQA_PRECEDENTS_TRANSLATE", "1") == "0" or int(os.environ.get("CQA_PRECEDENTS", "2")) <= 0:
+        return 0.0, 0
+    if PROVIDERS.get(provider.pid, {}).get("kind") != "anthropic" or not judge.available("haiku"):
+        return 0.0, 0
+    reference = json.loads(REFERENCE.read_text(encoding="utf-8"))["dialogs"]
+    reviewed = {row["conversation_id"] for row in db.q(
+        "SELECT DISTINCT e.conversation_id FROM appeals a JOIN evaluations e ON e.id = a.evaluation_id")}
+    pool = [db.record(cid) for cid in sorted(set(reference) | reviewed) if cid != record["conversation_id"]]
+    todo = [r for r in [record, *pool] if r and r.get("transcript") and not _is_ru(r.get("language"))
+            and _ru_texts(db, r["conversation_id"], r["transcript"]) is None]
+    if not todo:
+        return 0.0, 0
+    translator = judge.get_provider("haiku")
+    loop = id(asyncio.get_running_loop())
+
+    async def one(rec) -> tuple[float, int]:
+        cid = rec["conversation_id"]
+        async with _LOCKS.setdefault((loop, cid), asyncio.Lock()):  # параллельные оценки не платят дважды
+            if _ru_texts(db, cid, rec["transcript"]) is not None:
+                return 0.0, 0
+            try:
+                result = await translate.translate(db, rec, translator)
+            except Exception as e:  # noqa: BLE001 — без перевода сравним по исходному тексту
+                log.warning("перевод %s для поиска похожих не получен: %s", cid, e)
+                return 0.0, 1
+            return float(result.get("cost_usd") or 0.0), 1
+
+    results = await asyncio.gather(*(one(r) for r in todo))
+    # В цену оценки идёт перевод самого диалога; пул переводится один раз на базу (видно в журнале переводов).
+    return results[0] if todo[0] is record else (0.0, 0)
 
 
 def select(db, record: dict, config: dict, k: int | None = None) -> list[dict]:
@@ -67,7 +131,13 @@ def select(db, record: dict, config: dict, k: int | None = None) -> list[dict]:
                            "transcript": conv["transcript"], "labels": answers, "source": sources[cid]}
     if not corpus:
         return []
-    docs = {cid: _words(conv) for cid, conv in corpus.items()}
+    # По-русски сравниваем, только если оцениваемый диалог есть по-русски; иначе — всё по исходному тексту, как раньше.
+    query_ru = None if _is_ru(record.get("language")) else _ru_texts(db, record["conversation_id"],
+                                                                      record["transcript"])
+    in_russian = _is_ru(record.get("language")) or query_ru is not None
+    docs = {cid: _words(conv, None if not in_russian or _is_ru(conv["language"])
+                        else _ru_texts(db, cid, conv["transcript"]))
+            for cid, conv in corpus.items()}
     df = Counter(word for counts in docs.values() for word in counts)
     idf = {word: math.log(len(docs) / n) for word, n in df.items()}
 
@@ -77,7 +147,7 @@ def select(db, record: dict, config: dict, k: int | None = None) -> list[dict]:
         return {word: x / norm for word, x in values.items()}
 
     vectors = {cid: vec(counts) for cid, counts in docs.items()}
-    query = vectors.get(record["conversation_id"]) or vec(_words(record))
+    query = vectors.get(record["conversation_id"]) or vec(_words(record, query_ru))
     sims = sorted(((sum(query.get(word, 0) * x for word, x in vector.items()), cid)
                    for cid, vector in vectors.items() if cid != record["conversation_id"]), reverse=True)
     return [corpus[cid] for _, cid in sims[:k]]
