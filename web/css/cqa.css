@@ -306,6 +306,13 @@ a.cqa-link:hover, .cqa-link:hover { text-decoration: underline; }
 .cqa-col-scroll { height: calc(100vh - var(--cqa-header-h) - 112px); min-height: 520px; overflow: auto; overscroll-behavior: contain; }
 .cqa-results { padding-right: 4px; }
 .cqa-results > * + * { margin-top: 12px; }
+.cqa-callmetrics { font-size: 12.5px; }
+.cqa-callmetrics h2 { margin: 0; font-size: 15px; }
+.cqa-callmetrics p { margin: 7px 0; }
+.cqa-callmetrics ul { margin: 7px 0; padding-left: 20px; }
+.cqa-callmetrics li + li { margin-top: 5px; }
+.cqa-callmetrics details { margin-top: 7px; }
+.cqa-callmetrics summary { cursor: pointer; }
 
 /* транскрипт */
 .cqa-transcript-panel { display: flex; flex-direction: column; overflow: hidden; }

@@ -1,6 +1,7 @@
 // Демо-режим интерфейса без сервера (?mock=1): выдуманные диалоги из web/mock/*.json, состояние — в памяти вкладки.
 // Повторяет контракт docs/ARCHITECTURE.md. Модель не вызывается: «оценка» в демо-прогоне копирует ответы из
 // готовых демо-оценок — это только для проверки интерфейса. Перенос повторяет правила продукта.
+import { callMetrics } from './callmetrics.js';
 
 const BASE = new URL('./', import.meta.url);
 const clone = (x) => (x == null ? x : JSON.parse(JSON.stringify(x)));
@@ -254,6 +255,7 @@ export async function createMockApi() {
       const c = st.convs.find((x) => x.id === id);
       if (!c) throw new MockError(404, 'Диалог не найден');
       const out = clone(c);
+      out.call_metrics = callMetrics(out);
       if (out.audio_src === 'mock:audio') out.audio_src = (audio ||= silentWav(60));
       out.evaluations = st.evals.filter((e) => e.conversation_id === id).map(evalSummary).sort((a, b) => b.evaluation_id - a.evaluation_id);
       return out;

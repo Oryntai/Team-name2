@@ -182,6 +182,39 @@ class Card extends CqaElement {
   }
 
   resultsHtml() {
+    return this.callMetricsHtml() + this.evaluationHtml();
+  }
+
+  callMetricsHtml() {
+    const m = this.s.conv.call_metrics;
+    if (!isCall(this.s.conv.channel) || !m) return '';
+    const ref = (n) => `<a href="#" class="cqa-ref" data-ref="${n}">#${n}</a>`;
+    const interval = (h) => {
+      const start = this.s.conv.transcript[h.start_n - 1];
+      const seek = start?.audio_offset != null
+        ? `<button type="button" class="cqa-link" data-seek="${h.start_n}" title="Прослушать с этого места">${icon('play')}${fmtClock(start.audio_offset)}</button>` : '';
+      return `<li>${ref(h.start_n)} → ${h.end_n == null ? 'конец разговора (не закрыто)' : ref(h.end_n)} · ${fmtSeconds(h.duration_s)} ${seek}</li>`;
+    };
+    const share = (s) => s.share == null ? '—' : `${fmtScore(s.share * 100)}%`;
+    const pace = (s) => s.words_per_minute == null ? '—' : `${fmtScore(s.words_per_minute)} слов/мин`;
+    const p = m.response_pauses;
+    return `<div class="cqa-panel cqa-panel-pad cqa-callmetrics" aria-label="Звонок по меткам времени">
+      <h2>Звонок по меткам времени</h2>
+      <p class="cqa-muted">оценка по меткам времени расшифровки, не по звуку</p>
+      <div class="cqa-row"><span>Длительность <b>${fmtClock(m.duration_s)}</b></span><span>Удержания <b>${fmtSeconds(m.hold_s)}</b></span></div>
+      ${m.holds.length ? `<ul>${m.holds.map(interval).join('')}</ul>` : ''}
+      <p title="Доля от суммарного оценочного времени речи оператора и клиента">Доля речи: оператор <b>${share(m.speech.operator)}</b> · клиент <b>${share(m.speech.client)}</b></p>
+      <p title="Только реплики от трёх слов с положительным оценочным временем">Темп: оператор <b>${pace(m.speech.operator)}</b> · клиент <b>${pace(m.speech.client)}</b></p>
+      <p>Паузы перед ответом: медиана <b>${fmtSeconds(p.median_s)}</b> · максимум <b>${fmtSeconds(p.max_s)}</b></p>
+      <p class="cqa-faint">Между началами соседних реплик клиента и оператора, включая речь клиента.</p>
+      ${p.long.length ? `<details><summary>Дольше 10 с: ${p.long.length}</summary><ul>${p.long.map((v) => `<li>${ref(v.client_n)} → ${ref(v.operator_n)} · ${fmtSeconds(v.duration_s)}</li>`).join('')}</ul></details>` : ''}
+      ${m.recording_pauses.length ? `<details><summary>Паузы записи: ${fmtSeconds(m.recording_pause_s)}</summary><ul>${m.recording_pauses.map(interval).join('')}</ul></details>` : ''}
+      ${m.unknown_events.length ? `<details><summary>Прочие системные события: ${m.unknown_events.length}</summary><ul>${m.unknown_events.map((e) => `<li>${ref(e.n)} ${esc(e.text)}</li>`).join('')}</ul></details>` : ''}
+      ${(m.warnings || []).map((w) => `<p class="cqa-muted">${esc(w)}</p>`).join('')}
+    </div>`;
+  }
+
+  evaluationHtml() {
     const { ev } = this.s;
     if (!ev) {
       return `<div class="cqa-panel"><div class="cqa-empty"><div class="cqa-empty-icon">${icon('spark')}</div><h3>Диалог ещё не оценён</h3>
