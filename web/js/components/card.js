@@ -13,13 +13,18 @@ class Card extends CqaElement {
   init() {
     this.convId = this.getAttribute('conversation-id');
     this.evalId = this.getAttribute('evaluation-id');
-    this.s = { conv: null, ev: null, cfg: null, meta: null, checklists: [], evals: [], appealFor: null, active: null, rerunOpen: false, run: null };
+    this.s = { conv: null, ev: null, cfg: null, meta: null, checklists: [], evals: [], appealFor: null, active: null, rerunOpen: false, run: null, openCrit: new Set() };
     this.innerHTML = '<div class="cqa-loading"><span class="cqa-spinner cqa-spinner--lg"></span>Открываю диалог…</div>';
     this.addEventListener('click', (e) => this.onClick(e));
     this.addEventListener('submit', (e) => this.onSubmit(e));
     this.addEventListener('change', (e) => this.onChange(e));
     this.addEventListener('mouseover', (e) => this.onHover(e, true));
     this.addEventListener('mouseout', (e) => this.onHover(e, false));
+    // раскрытые критерии переживают перерисовку (toggle не всплывает — ловим на погружении)
+    this.addEventListener('toggle', (e) => {
+      const d = e.target;
+      if (d.matches?.('details.cqa-crit')) { if (d.open) this.s.openCrit.add(d.dataset.crit); else this.s.openCrit.delete(d.dataset.crit); }
+    }, true);
     this.listen(window, 'cqa-role', () => this.renderResults());
     this.load();
   }
@@ -114,7 +119,7 @@ class Card extends CqaElement {
       <span class="cqa-faint" style="font-size:12px">метки времени — как в исходных данных</span>
       <span class="cqa-spacer"></span>
       ${pii ? `<span class="cqa-badge cqa-badge--warn" title="Эти фрагменты заменены метками до отправки модели">${icon('lock')}скрыто от модели: ${pii}</span>` : ''}
-      <span class="cqa-badge cqa-badge--ghost" title="Бот и системные события — контекст, оценивается только оператор">бот и система — контекст</span>
+      <span class="cqa-badge cqa-badge--ghost" title="Реплики бота и системные события модель видит как контекст, но оценивает только оператора">оценивается только оператор</span>
     </div>`;
   }
 
@@ -232,7 +237,19 @@ class Card extends CqaElement {
       ${this.grossHtml(fin)}
       ${this.heroHtml(orig, fin, crits, totalChanged || changedCrit.length > 0)}
       ${this.metaHtml()}
-      ${this.criteriaHtml(crits)}`;
+      ${this.criteriaHtml(crits)}
+      ${this.thinkingHtml()}`;
+  }
+
+  thinkingHtml() {
+    const runs = (this.s.ev.thinking || []).filter((t) => t && t.trim());
+    if (!runs.length) return '';
+    const n = this.s.conv.transcript?.length || 0;
+    const para = (t) => t.trim().split(/\n{2,}/).map((x) => `<p>${linkifyRefs(x, n)}</p>`).join('');
+    return `<details class="cqa-thinking">
+      <summary>${icon('spark')}<b>Как модель рассуждала</b><span class="cqa-faint">${runs.length > 1 ? `${runs.length} ${plural(runs.length, 'независимый прогон', 'независимых прогона', 'независимых прогонов')}` : 'пересказ размышлений'} · на рабочем языке модели</span>${icon('down')}</summary>
+      ${runs.map((t, i) => `<div class="cqa-thinking-run">${runs.length > 1 ? `<div class="cqa-thinking-label">Прогон ${i + 1}</div>` : ''}${para(t)}</div>`).join('')}
+    </details>`;
   }
 
   heroHtml(orig, fin, crits, changed) {
@@ -303,7 +320,8 @@ class Card extends CqaElement {
       if (!g) { g = { name, items: [] }; groups.push(g); }
       g.items.push(c);
     }
-    return groups.map((g) => `<div class="cqa-sec-head"><span class="cqa-eyebrow">${esc(g.name)}</span></div>
+    const allOpen = crits.length && crits.every((c) => this.s.openCrit.has(c.id));
+    return `<div class="cqa-crit-tools"><span class="cqa-faint">Нажмите на критерий — обоснование и реплики</span><button type="button" class="cqa-link" data-act="crit-all">${allOpen ? 'Свернуть все' : 'Развернуть все'}</button></div>` + groups.map((g) => `<div class="cqa-sec-head"><span class="cqa-eyebrow">${esc(g.name)}</span></div>
       ${g.items.map((c) => this.critHtml(c)).join('')}`).join('');
   }
 
@@ -341,20 +359,26 @@ class Card extends CqaElement {
     const agreement = /^(\d+)\/(\d+)$/.exec(orig.agreement || '');
     const uncertain = agreement && Number(agreement[1]) < Number(agreement[2]);
     const votesTitle = (orig.votes || []).map((a, i) => `Прогон ${i + 1}: ${a}`).join('\n');
-    return `<article class="cqa-crit ${this.s.active === c.id ? 'is-active' : ''}" data-tone="${tone}" data-crit="${esc(c.id)}">
-      <div class="cqa-crit-head">
+    const open = this.s.openCrit.has(c.id) || this.s.appealFor === c.id || this.s.active === c.id;
+    const flags = [uncertain ? `<span class="cqa-crit-flag" title="${esc(votesTitle)}">не уверена ${esc(agreement[1])}/${esc(agreement[2])}</span>` : '',
+      c.appeal?.status === 'open' ? `<span class="cqa-crit-flag cqa-crit-flag--warn">${icon('gavel')}апелляция</span>` : ''].join('');
+    return `<details class="cqa-crit ${this.s.active === c.id ? 'is-active' : ''}" data-tone="${tone}" data-crit="${esc(c.id)}" ${open ? 'open' : ''}>
+      <summary class="cqa-crit-head">
         <span class="cqa-crit-id">${esc(c.id)}</span>
-        <div class="cqa-crit-title">${esc(c.title)}${defTitle ? ` <span class="cqa-faint" title="${esc(defTitle)}">${icon('info')}</span>` : ''}</div>
+        <div class="cqa-crit-title">${esc(c.title)}${flags}${defTitle ? ` <span class="cqa-faint" title="${esc(defTitle)}">${icon('info')}</span>` : ''}</div>
         ${answer}
         ${points}
-      </div>
+        <span class="cqa-crit-chev">${icon('down')}</span>
+      </summary>
+      <div class="cqa-crit-body">
       ${step}
       ${c.reused_from != null ? `<p class="cqa-faint">Перенесено из оценки №${esc(c.reused_from)}: определение не менялось.</p>` : ''}
       ${uncertain ? `<p class="cqa-muted" title="${esc(votesTitle)}">${icon('info')} модель не уверена: ${esc(agreement[1])} из ${esc(agreement[2])}</p>` : ''}
       ${orig.explanation ? `<p class="cqa-crit-expl">${linkifyRefs(orig.explanation, n)}</p>` : ''}
       ${evHtml}
       ${this.appealHtml(c, crit)}
-    </article>`;
+      </div>
+    </details>`;
   }
 
   chipsHtml(nums) {
@@ -491,7 +515,12 @@ class Card extends CqaElement {
     const act = t.closest('[data-act]');
     if (act) {
       const a = act.dataset.act;
-      if (a === 'appeal-open') { this.s.appealFor = act.dataset.crit; this.renderResults(); this.querySelector('form[data-form="appeal"] textarea')?.focus(); }
+      if (a === 'crit-all') {
+        const ids = (this.s.ev?.criteria || []).map((c) => c.id);
+        const allOpen = ids.every((id) => this.s.openCrit.has(id));
+        this.s.openCrit = new Set(allOpen ? [] : ids);
+        this.renderResults();
+      } else if (a === 'appeal-open') { this.s.appealFor = act.dataset.crit; this.renderResults(); this.querySelector('form[data-form="appeal"] textarea')?.focus(); }
       else if (a === 'appeal-cancel') { this.s.appealFor = null; this.renderResults(); }
       else if (a === 'rerun-toggle') { this.s.rerunOpen = !this.s.rerunOpen; this.part('rerun').innerHTML = this.s.rerunOpen ? this.rerunHtml() : ''; act.setAttribute('aria-expanded', String(this.s.rerunOpen)); }
       else if (a === 'rerun-start') this.startRerun(act.closest('div'));

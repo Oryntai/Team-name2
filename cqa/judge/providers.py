@@ -39,6 +39,7 @@ class Reply:
     cache_read: int = 0
     cache_write: int = 0
     stop: str | None = None
+    thinking: str = ""  # пересказ размышлений модели перед ответом (Claude: thinking.display = summarized)
 
 
 def env(key: str, default: str | None = None) -> str | None:
@@ -99,6 +100,8 @@ class AnthropicProvider:
         kw = dict(model=self.model, max_tokens=max_tokens,
                   system=[{"type": "text", "text": system, "cache_control": {"type": "ephemeral"}}],
                   messages=[{"role": "user", "content": user}],
+                  # Haiku 5.5 размышляет по умолчанию, текст скрыт; summarized возвращает пересказ без лишних вызовов
+                  thinking={"type": "adaptive", "display": "summarized"},
                   output_config={"effort": self.cfg.get("effort", "medium"),
                                  "format": {"type": "json_schema", "schema": schema}})
         try:
@@ -119,10 +122,11 @@ class AnthropicProvider:
         if r.stop_reason == "max_tokens":
             raise ProviderError("Ответ модели обрезан (max_tokens).")
         text = next((b.text for b in r.content if b.type == "text"), "")
+        thinking = "\n\n".join(b.thinking for b in r.content if b.type == "thinking" and getattr(b, "thinking", None))
         u = r.usage
         return Reply(text=text, model=r.model, input_tokens=u.input_tokens or 0, output_tokens=u.output_tokens or 0,
                      cache_read=getattr(u, "cache_read_input_tokens", 0) or 0,
-                     cache_write=getattr(u, "cache_creation_input_tokens", 0) or 0, stop=r.stop_reason)
+                     cache_write=getattr(u, "cache_creation_input_tokens", 0) or 0, stop=r.stop_reason, thinking=thinking)
 
 
 class OpenAICompatProvider:

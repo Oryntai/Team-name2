@@ -126,6 +126,8 @@ class Runner:
             "latency_s": round(latency, 2), "input_tokens": tokens_in, "output_tokens": tokens_out,
             "cost_usd": round(cost, 6), "answers": answers, "pii_masked": res.get("pii_masked") or [],
             "raw": json.dumps(raw_calls, ensure_ascii=False) if votes > 1 and calls else res.get("raw"),
+            "thinking": (res.get("thinking") if isinstance(res.get("thinking"), list)
+                         else [res["thinking"]] if res.get("thinking") else []),
             "total": total, "gross": gross})
         self.db.set_item(run_id, cid, "ok" if status == "ok" else "error", ev_id, None if status == "ok" else error)
         self.db.bump_run(run_id, status == "ok", cost)

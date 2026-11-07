@@ -67,6 +67,7 @@ def merge_results(results: list[dict], config: dict) -> dict:
         "latency_s": max(r.get("latency_s") or 0.0 for r in results),
         "model_calls": len(results),
         "raw": json.dumps([r.get("raw") or "" for r in results], ensure_ascii=False),
+        "thinking": [r.get("thinking") or "" for r in successful],  # в порядке votes
     }
 
 

@@ -72,6 +72,7 @@ async def evaluate(record: dict, config: dict, provider, *, only=None, mask_pii:
         return {**base, "status": "error", "error": str(e), "latency_s": round(time.monotonic() - t0, 2)}
     latency = round(time.monotonic() - t0, 2)
     out = {**base, "model": reply.model or base["model"], "latency_s": latency, "raw": reply.text,
+           "thinking": getattr(reply, "thinking", "") or "",
            "input_tokens": reply.input_tokens + reply.cache_read + reply.cache_write,
            "output_tokens": reply.output_tokens, "cost_usd": cost_usd(pid, reply) if pid in PROVIDERS else 0.0}
     js = _parse(reply.text)

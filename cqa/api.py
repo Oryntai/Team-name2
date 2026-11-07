@@ -272,6 +272,7 @@ def create_app(db_path: str | os.PathLike | None = None, *, web_dir: str | os.Pa
                 "mode": ev["mode"], "evaluated": ev["evaluated"], "reused": ev["reused"],
                 "model_calls": ev["model_calls"],
                 "precedents": ev["precedents"],
+                "thinking": ev.get("thinking") or [],
                 "created_at": ev["created_at"], "latency_s": ev["latency_s"], "input_tokens": ev["input_tokens"],
                 "output_tokens": ev["output_tokens"], "cost_usd": ev["cost_usd"], "status": ev["status"],
                 "error": ev["error"], "pii_masked": ev["pii_masked"] or [], "criteria": crit,
