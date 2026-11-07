@@ -195,8 +195,8 @@ class Card extends CqaElement {
         ? `<button type="button" class="cqa-link" data-seek="${h.start_n}" title="Прослушать с этого места">${icon('play')}${fmtClock(start.audio_offset)}</button>` : '';
       return `<li>${ref(h.start_n)} → ${h.end_n == null ? 'конец разговора (не закрыто)' : ref(h.end_n)} · ${fmtSeconds(h.duration_s)} ${seek}</li>`;
     };
-    const share = (s) => s.share == null ? '—' : `${fmtScore(s.share * 100)}%`;
-    const pace = (s) => s.words_per_minute == null ? '—' : `${fmtScore(s.words_per_minute)} слов/мин`;
+    const share = (s) => s.share == null ? '—' : `${Math.round(s.share * 100)}%`;
+    const pace = (s) => s.words_per_minute == null ? '—' : `${Math.round(s.words_per_minute)} слов/мин`;
     const p = m.response_pauses;
     return `<div class="cqa-panel cqa-panel-pad cqa-callmetrics" aria-label="Звонок по меткам времени">
       <h2>Звонок по меткам времени</h2>
