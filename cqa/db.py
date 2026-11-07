@@ -43,6 +43,13 @@ CREATE TABLE IF NOT EXISTS appeals(
   id INTEGER PRIMARY KEY AUTOINCREMENT, evaluation_id INTEGER, criterion_id TEXT, comment TEXT, created_at TEXT,
   status TEXT, new_answer TEXT, reason TEXT, decided_at TEXT);
 CREATE INDEX IF NOT EXISTS appeals_eval ON appeals(evaluation_id);
+CREATE TABLE IF NOT EXISTS fairness_calls(
+  id INTEGER PRIMARY KEY AUTOINCREMENT, experiment_id TEXT NOT NULL, conversation_id TEXT NOT NULL,
+  phase TEXT NOT NULL, variant TEXT NOT NULL, attempt INTEGER NOT NULL, created_at TEXT NOT NULL,
+  provider TEXT NOT NULL, model TEXT, status TEXT NOT NULL, error TEXT, latency_s REAL,
+  input_tokens INTEGER, output_tokens INTEGER, cache_read_tokens INTEGER, cache_write_tokens INTEGER,
+  cost_usd REAL, request TEXT NOT NULL, response TEXT);
+CREATE INDEX IF NOT EXISTS fairness_calls_experiment ON fairness_calls(experiment_id);
 """
 
 
