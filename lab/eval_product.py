@@ -32,6 +32,7 @@ async def main():
     ap.add_argument("--conc", type=int, default=20)
     ap.add_argument("--limit", type=int, default=0, help="первые N чатов (для проверки пути)")
     ap.add_argument("--checklist", default="", help="путь к чек-листу (по умолчанию — начальный из cqa/checklists)")
+    ap.add_argument("--effort", help="переопределить effort модели: low / medium / high / xhigh / max")
     ap.add_argument("--tag", default="", help="метка прогона в имени папки")
     args = ap.parse_args()
 
@@ -43,6 +44,8 @@ async def main():
     cfg = ck.normalize(json.loads(pathlib.Path(args.checklist).read_text())) if args.checklist else ck.load_default()
     crit_ids = [c["id"] for c in cfg["criteria"]]
     prov = get_provider(args.provider)
+    if args.effort:
+        prov.cfg = dict(prov.cfg, effort=args.effort)
     sem = asyncio.Semaphore(args.conc)
 
     async def one(cid):
@@ -51,6 +54,12 @@ async def main():
 
     t0 = time.monotonic()
     res = dict(zip(ids, await asyncio.gather(*[one(c) for c in ids])))
+    for pause in (10, 30):  # упавшие (обычно лимит запросов 429) переоцениваем после паузы
+        failed = [c for c in ids if res[c]["status"] != "ok"]
+        if not failed:
+            break
+        await asyncio.sleep(pause)
+        res.update(zip(failed, await asyncio.gather(*[one(c) for c in failed])))
     wall = time.monotonic() - t0
     ok = [c for c in ids if res[c]["status"] == "ok"]
     errors = {c: res[c]["error"] for c in ids if res[c]["status"] != "ok"}

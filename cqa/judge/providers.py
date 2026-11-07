@@ -109,7 +109,7 @@ class AnthropicProvider:
         except anthropic.AuthenticationError as e:
             raise ProviderError("Ключ Claude не принят (401).") from e
         except anthropic.RateLimitError as e:
-            raise ProviderError("Лимит запросов Claude (429), повторите позже.") from e
+            raise ProviderError(f"Лимит запросов Claude (429), повторите позже. {str(e.message)[:200]}") from e
         except anthropic.APIStatusError as e:
             raise ProviderError(f"Claude API {e.status_code}: {str(e.message)[:300]}") from e
         except anthropic.APIConnectionError as e:
