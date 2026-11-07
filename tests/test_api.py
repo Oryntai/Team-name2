@@ -91,7 +91,8 @@ def test_upload_run_evaluation_appeal_decision(client):
     k04 = next(x for x in ev["criteria"] if x["id"] == "04")
     assert k04["allowed"] == ["20", "15", "10", "5", "0", "N/A"] and k04["type"] == "scale"
     for x in ev["criteria"]:
-        assert set(x["original"]) == {"answer", "explanation", "evidence"}
+        assert set(x["original"]) == {"answer", "explanation", "evidence", "votes", "agreement"}
+        assert x["original"]["agreement"] == "3/3"
         assert x["final_answer"] == x["original"]["answer"] and x["appeal"] is None
         assert {"applicable", "points", "weight_eff", "points_eff"} <= set(x["score_original"])
     # заглушка отвечает первой допустимой ступенью: всё «Да» / максимум, у грубой ошибки тоже «Да»

@@ -41,7 +41,7 @@ def run_one(monkeypatch, answers):
     monkeypatch.setattr(rn.judge, "evaluate", fake_evaluate)
     monkeypatch.setattr(rn, "RETRY_PAUSES", (0, 0, 0))
     db = StubDB()
-    asyncio.run(rn.Runner(db)._one(1, "x", CFG, 1, get_provider("fake"), asyncio.Semaphore(1)))
+    asyncio.run(rn.Runner(db, votes=1)._one(1, "x", CFG, 1, get_provider("fake"), asyncio.Semaphore(1)))
     return db, calls
 
 
