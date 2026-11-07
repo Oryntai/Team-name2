@@ -234,9 +234,10 @@ def eligible(ev: dict, config: dict, allow_fake: bool = False) -> bool:
     return set(got) == set(want) and all((got[k] or {}).get("fingerprint") == h for k, h in want.items())
 
 
-def pick(db: DB, cid: str, config: dict, allow_fake: bool = False) -> tuple[dict | None, dict | None]:
+def pick(db: DB, cid: str, config: dict, allow_fake: bool = False,
+         min_id: int = 0) -> tuple[dict | None, dict | None]:
     """(последняя годная оценка, последняя оценка вообще) — вторая нужна для причины ошибки."""
-    evs = db.evaluations_for(cid)  # новые первыми
+    evs = [e for e in db.evaluations_for(cid) if e["id"] > min_id]  # новые первыми; min_id — для --fresh
     return next((e for e in evs if eligible(e, config, allow_fake)), None), (evs[0] if evs else None)
 
 
@@ -287,11 +288,11 @@ def turn_counts(db: DB, ids: list[str]) -> dict[str, int]:
 
 
 def build(db: DB, ids: list[str], config: dict, team: str, provider: str = "haiku",
-          allow_fake: bool = False) -> dict:
+          allow_fake: bool = False, min_id: int = 0) -> dict:
     turns = turn_counts(db, ids)
     results, used = [], []
     for cid in ids:
-        ev, last = pick(db, cid, config, allow_fake)
+        ev, last = pick(db, cid, config, allow_fake, min_id)
         results.append(record(cid, ev, last, config, turns.get(cid, 0)))
         if ev:
             used.append(ev)
@@ -384,13 +385,15 @@ async def _run_set(args) -> int:
         print("Набор пуст.")
         return 1
     checklist_id = official_checklist_id(db, config)
+    # --fresh: в файл идут только оценки этого запуска (старые и новые не смешиваем)
+    min_id = db.one("SELECT COALESCE(MAX(id), 0) AS m FROM evaluations")["m"] if args.fresh else 0
     if not args.no_evaluate:
         for _ in range(2):  # второй заход — для диалогов, не прошедших и после повторов внутри прогона
-            todo = [cid for cid in ids if pick(db, cid, config, allow_fake)[0] is None]
+            todo = [cid for cid in ids if pick(db, cid, config, allow_fake, min_id)[0] is None]
             if not todo:
                 break
             await _evaluate(db, todo, checklist_id, args.provider)
-    doc = build(db, ids, config, args.team, args.provider, allow_fake)
+    doc = build(db, ids, config, args.team, args.provider, allow_fake, min_id)
     errs = validate(doc, expected_ids=ids, expect_count=args.expect, n_turns=turn_counts(db, ids))
     out = pathlib.Path(args.out)
     out.parent.mkdir(parents=True, exist_ok=True)
@@ -432,6 +435,7 @@ def main(argv: list[str] | None = None) -> int:
         s.add_argument("--provider", default="haiku", choices=list(PROVIDERS), help="модель (как в интерфейсе)")
         s.add_argument("--dataset", help="id набора, уже загруженного в базу")
         s.add_argument("--no-evaluate", action="store_true", help="не вызывать модель, выгрузить то, что уже оценено")
+        s.add_argument("--fresh", action="store_true", help="переоценить весь набор заново: в файл — только оценки этого запуска")
         s.add_argument("--out", default=str(ROOT / "results" / name / "results.json"))
         s.add_argument("--expect", type=int, default=EXPECTED[name], help="сколько записей должно быть")
         s.add_argument("--db", help="путь к базе (по умолчанию var/cqa.db или CQA_DB)")

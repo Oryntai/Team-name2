@@ -9,6 +9,7 @@ from __future__ import annotations
 import asyncio
 import copy
 import json
+import os
 import re
 import threading
 import time
@@ -16,6 +17,8 @@ from decimal import Decimal, ROUND_HALF_UP
 
 import pytest
 from fastapi.testclient import TestClient
+
+VOTES = int(os.environ.get("CQA_VOTES", "3"))  # вызовов на оценку — как у Runner по умолчанию (голосование)
 
 from cqa import api, judge, runner
 from cqa.judge.providers import FakeProvider
@@ -464,7 +467,7 @@ def test_checklist_chaos(setup, name, valid, target, error_text):
         assert plan["total"] == 4 and plan["mode"] == mode
         assert plan["without_previous"] == 4 - old_n
         assert plan["reused"] == expected_reused and plan["evaluated"] == 4 * n - expected_reused, plan
-        assert plan["model_calls"] == (4 - old_n if mode == "incremental" and len(reusable) == n else 4), plan
+        assert plan["model_calls"] == VOTES * (4 - old_n if mode == "incremental" and len(reusable) == n else 4), plan
         run = execute(c, body(new_id, mode))
         assert all(run[key] == plan[key] for key in ("model_calls", "evaluated", "reused")), (run, plan)
         evaluations = readable_evaluations(c, run, config)

@@ -17,7 +17,7 @@ from .scoring import ScoreError, score
 from .vote import evaluate_voted
 
 log = logging.getLogger("cqa.runner")
-CONCURRENCY = 10
+CONCURRENCY = 24  # вызовов модели одновременно: при 3 голосах — 8 диалогов; 429 ловили только при ~40
 RETRY_PAUSES = (5, 15, 30)  # секунды между повторными попытками оценки одного диалога
 
 

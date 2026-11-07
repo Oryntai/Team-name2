@@ -208,3 +208,9 @@ def test_cli_prod_end_to_end_from_file(tmp_path, monkeypatch):
     assert rs.main(["prod", "--dataset", "CTRL-1", "--provider", "fake", "--expect", "2", "--out", str(out),
                     "--db", str(tmp_path / "cqa.db"), "--team", "Команда"]) == 0
     assert len(db.list_runs()) == n
+    # --fresh: весь набор оценивается заново, старые оценки в файл не попадают
+    before = db.one("SELECT MAX(id) AS m FROM evaluations")["m"]
+    assert rs.main(["prod", "--dataset", "CTRL-1", "--provider", "fake", "--expect", "2", "--out", str(out),
+                    "--db", str(tmp_path / "cqa.db"), "--team", "Команда", "--fresh"]) == 0
+    assert len(db.list_runs()) == n + 1
+    assert all(rs.pick(db, c, rs.official_config(), True, before)[0] for c in ("ctrl-1", "ctrl-2"))
