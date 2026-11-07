@@ -142,7 +142,7 @@ def test_schema_and_metering_saved_even_with_cached_tokens(db):
     assert ref["additionalProperties"] is False
     assert set(ref["required"]) == {"conversation_id", "criterion_id", "why"}
     assert ref["properties"]["conversation_id"]["enum"] == ["a", "b"]
-    assert ref["properties"]["criterion_id"]["enum"] == ["01", "08", None]
+    assert ref["properties"]["criterion_id"] == {"type": "string", "enum": ["01", "08", ""]}
     class Metered(FakeAskProvider):
         async def complete(self, system, user, schema, max_tokens=0):
             assert "900101300007" not in user
@@ -260,3 +260,11 @@ def test_migration_on_existing_database_is_idempotent(db):
         assert reopened.list_asks() == []
         assert reopened.q("SELECT * FROM evaluations") == before
         reopened.close()
+
+
+def test_empty_criterion_means_no_criterion():
+    # Claude не принимает enum с типом ["string", "null"], поэтому «без критерия» приходит пустой строкой.
+    from cqa.ask import _validate
+    context = {"conversations": [{"id": "a", "criteria": {"01": {}}}]}
+    out = _validate(json.dumps({"answer": "Текст [a]", "refs": [{"conversation_id": "a", "criterion_id": "", "why": "x"}]}), context)
+    assert out["refs"][0]["criterion_id"] is None

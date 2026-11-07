@@ -12,7 +12,8 @@ from .pii import mask_text
 
 SYSTEM = """Ты — помощник руководителя контакт-центра брокера. Отвечай по-русски кратко, только по данным снимка.
 Не выдумывай факты, причины, темы или содержание реплик. Каждую мысль подкрепляй ссылками на диалоги:
-в answer указывай [conversation_id], а в refs перечисли эти диалоги с коротким why и criterion_id, если он известен.
+в answer указывай [conversation_id], а в refs перечисли эти диалоги с коротким why и criterion_id (код критерия;
+пустая строка, если ссылка не про конкретный критерий).
 Если данных для ответа нет — прямо скажи об этом; не подменяй отсутствие сведений отрицательным выводом.
 Снимок содержит последнюю успешную оценку каждого диалога в выбранном наборе и чек-листе.
 Это исходные ответы модели и исходный итог, без решений по апелляциям. Разные версии чек-листа не смешивай в выводах.
@@ -30,7 +31,7 @@ SCHEMA = {
         "refs": {"type": "array", "items": {
             "type": "object", "additionalProperties": False,
             "properties": {"conversation_id": {"type": "string"},
-                           "criterion_id": {"type": ["string", "null"]}, "why": {"type": "string"}},
+                           "criterion_id": {"type": "string"}, "why": {"type": "string"}},
             "required": ["conversation_id", "criterion_id", "why"],
         }},
     },
@@ -118,7 +119,8 @@ def response_schema(context: dict) -> dict:
     schema = copy.deepcopy(SCHEMA)
     props = schema["properties"]["refs"]["items"]["properties"]
     props["conversation_id"]["enum"] = [c["id"] for c in context["conversations"]]
-    props["criterion_id"]["enum"] = sorted({cid for c in context["conversations"] for cid in c["criteria"]}) + [None]
+    # Claude не принимает enum при типе ["string", "null"]: «без критерия» — пустая строка, в ответе API это None.
+    props["criterion_id"]["enum"] = sorted({cid for c in context["conversations"] for cid in c["criteria"]}) + [""]
     return schema
 
 
@@ -133,6 +135,8 @@ def _validate(text: str, context: dict) -> dict:
     allowed = {c["id"]: c["criteria"] for c in context["conversations"]}
     if valid:
         for ref in result["refs"]:
+            if isinstance(ref, dict) and ref.get("criterion_id") == "":
+                ref["criterion_id"] = None
             if (not isinstance(ref, dict) or set(ref) != {"conversation_id", "criterion_id", "why"}
                     or not isinstance(ref["conversation_id"], str) or ref["conversation_id"] not in allowed
                     or not isinstance(ref["why"], str) or not ref["why"].strip()
