@@ -12,6 +12,7 @@ import logging
 import os
 import pathlib
 import re
+from typing import Literal
 
 import httpx
 from fastapi import FastAPI, File, HTTPException, Query, Request, UploadFile
@@ -27,6 +28,7 @@ from . import audio, judge, pii, sources
 from .checklist import allowed_answers, normalize, validate
 from .db import DB
 from .judge.providers import env as read_env
+from .incremental import plan
 from .runner import Runner
 from .scoring import ScoreError, score
 
@@ -55,6 +57,7 @@ class RunIn(BaseModel):
     dataset_id: str | None = None
     checklist_id: int | None = None  # не задан → самая новая версия чек-листа
     provider: str | None = None
+    mode: Literal["full", "incremental"] = "incremental"
 
 
 class ChecklistIn(BaseModel):
@@ -238,6 +241,7 @@ def create_app(db_path: str | os.PathLike | None = None, *, web_dir: str | os.Pa
             crit.append({
                 "id": c["id"], "title": c.get("title"), "section": c.get("section"), "type": c["type"],
                 "weight": c.get("weight"), "na": bool(c.get("na")), "allowed": allowed_answers(c),
+                "reused_from": (o or {}).get("reused_from"), "fingerprint": (o or {}).get("fingerprint"),
                 "original": ({"answer": o.get("answer"), "explanation": o.get("explanation", ""),
                               "evidence": o.get("evidence") or []} if isinstance(o, dict) else None),
                 "final_answer": fin.get(c["id"]) if fin else (o or {}).get("answer"),
@@ -249,6 +253,8 @@ def create_app(db_path: str | os.PathLike | None = None, *, web_dir: str | os.Pa
                 "checklist": {"id": ev["checklist_id"], "name": cl["name"] if cl else None,
                               "version": cl["version"] if cl else None, "label": label(cl)},
                 "provider": ev["provider"], "model": ev["model"], "prompt_version": ev["prompt_version"],
+                "mode": ev["mode"], "evaluated": ev["evaluated"], "reused": ev["reused"],
+                "model_calls": ev["model_calls"],
                 "created_at": ev["created_at"], "latency_s": ev["latency_s"], "input_tokens": ev["input_tokens"],
                 "output_tokens": ev["output_tokens"], "cost_usd": ev["cost_usd"], "status": ev["status"],
                 "error": ev["error"], "pii_masked": ev["pii_masked"] or [], "criteria": crit,
@@ -394,8 +400,7 @@ def create_app(db_path: str | os.PathLike | None = None, *, web_dir: str | os.Pa
             _fail(404, f"Оценка {ev_id} не найдена.")
         return eval_detail(ev)
 
-    @app.post("/api/runs")
-    async def start_run(body: RunIn):
+    def run_input(body: RunIn):
         if body.checklist_id is None:
             body.checklist_id = max((c["id"] for c in db.list_checklists()), default=None)
         if body.checklist_id is None or not checklist(body.checklist_id):
@@ -419,8 +424,18 @@ def create_app(db_path: str | os.PathLike | None = None, *, web_dir: str | os.Pa
             _fail(422, "Выберите диалоги или набор для оценки.")
         if not ids:
             _fail(422, "Выберите диалоги или набор для оценки.")
+        return ids, pid
+
+    @app.post("/api/runs/plan")
+    async def run_plan(body: RunIn):
+        ids, pid = run_input(body)
+        return plan(db, ids, body.checklist_id, judge.model_name(pid), body.mode)
+
+    @app.post("/api/runs")
+    async def start_run(body: RunIn):
+        ids, pid = run_input(body)
         try:
-            run_id = runner.start(ids, body.checklist_id, pid)
+            run_id = runner.start(ids, body.checklist_id, pid, body.mode)
         except judge.ProviderError as e:
             _fail(422, str(e))
         return {"run_id": run_id}
@@ -430,7 +445,7 @@ def create_app(db_path: str | os.PathLike | None = None, *, web_dir: str | os.Pa
         out = {"id": r["id"], "status": r["status"], "checklist_id": r["checklist_id"], "checklist_label": label(cl),
                "provider": r["provider"], "model": r["model"], "total": r["total"], "done": r["done"],
                "failed": r["failed"], "cost_usd": round(r["cost_usd"] or 0, 6), "created_at": r["created_at"],
-               "finished_at": r["finished_at"]}
+               "finished_at": r["finished_at"], "mode": r["mode"], **db.run_counts(r["id"])}
         st = r if "tokens_in" in r else db.run_stats(r["id"])
         out.update({"avg_cost_per_eval": round(st["avg_cost_per_eval"], 6) if st["avg_cost_per_eval"] is not None else None,
                     "avg_latency_s": round(st["avg_latency_s"], 2) if st["avg_latency_s"] is not None else None,
@@ -452,6 +467,45 @@ def create_app(db_path: str | os.PathLike | None = None, *, web_dir: str | os.Pa
         if not r:
             _fail(404, f"Прогон {run_id} не найден.")
         return run_view(r, True)
+
+    @app.get("/api/runs/{run_id}/diff")
+    async def run_diff(run_id: int):
+        r = db.run(run_id)
+        if not r:
+            _fail(404, f"Прогон {run_id} не найден.")
+        counts, items = {}, []
+        for item in db.run_items(run_id):
+            previous = db.evaluation(item["previous_evaluation_id"]) if item["previous_evaluation_id"] else None
+            current = db.evaluation(item["evaluation_id"]) if item["evaluation_id"] else None
+            before = previous["answers"] if previous else {}
+            after = current["answers"] if current else {}
+            changes = []
+            # Сравниваем исходные ответы; решения проверяющего принадлежат своей оценке.
+            if current and current["status"] == "ok":
+                for cid in dict.fromkeys([*before, *after]):
+                    a, b = before.get(cid, {}).get("answer"), after.get(cid, {}).get("answer")
+                    if a != b:
+                        changes.append({"id": cid, "before": a, "after": b})
+                        counts[cid] = counts.get(cid, 0) + 1
+
+            def brief(ev):
+                return {"id": ev["id"], "total": ev["total"],
+                        "gross": None if ev["gross"] is None else bool(ev["gross"]),
+                        "status": ev["status"]} if ev else None
+
+            items.append({"conversation_id": item["conversation_id"], "status": item["status"],
+                          "error": item["error"], "previous": brief(previous), "current": brief(current),
+                          "changes": changes})
+        cfg = checklist(r["checklist_id"])["config"]
+        titles = {c["id"]: c["title"] for c in cfg["criteria"]}
+        for item in items:
+            if item["previous"]:
+                old = db.evaluation(item["previous"]["id"])
+                for c in checklist(old["checklist_id"])["config"]["criteria"]:
+                    titles.setdefault(c["id"], c["title"])
+        return {"run_id": run_id, "items": items,
+                "criteria": [{"id": cid, "title": title, "changed": counts.get(cid, 0)}
+                             for cid, title in titles.items()]}
 
     @app.get("/api/checklists")
     async def checklists():

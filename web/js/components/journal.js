@@ -37,7 +37,7 @@ class Journal extends CqaElement {
     this.innerHTML = `
       <div class="cqa-page-head">
         <div><div class="cqa-eyebrow">Корректность процесса</div><h1>Журнал прогонов</h1>
-          <div class="cqa-page-sub">Каждая оценка — живой вызов модели с записью: какая модель, какой чек-лист, сколько времени, токенов и денег. Готовых ответов нет.</div></div>
+          <div class="cqa-page-sub">Модель оценивает изменённые критерии, остальные ответы переносим по отпечаткам определений. Здесь — модель, чек-лист, вызовы, время, токены и стоимость.</div></div>
         <div class="cqa-page-actions"><button type="button" class="cqa-btn" data-act="reload">${icon('refresh')}Обновить</button></div>
       </div>
       <div class="cqa-kpis">
@@ -67,7 +67,7 @@ class Journal extends CqaElement {
           <td class="cqa-cell-id">${esc(r.id)}</td>
           <td class="cqa-nowrap">${esc(fmtDateTime(r.created_at))}</td>
           <td>${esc(r.checklist_label || `чек-лист №${r.checklist_id}`)}</td>
-          <td>${esc(providerLabel(this.s.meta, r.provider, r.model))}<div class="cqa-cell-sub cqa-mono">${esc(r.model || '')}</div></td>
+          <td>${esc(providerLabel(this.s.meta, r.provider, r.model))}<div class="cqa-cell-sub cqa-mono">${esc(r.model || '')}</div><div class="cqa-cell-sub">${r.mode === 'incremental' ? 'Инкрементально' : 'Полностью'} · вызовов ${fmtInt(r.model_calls || 0)}<br>Критериев оценено ${fmtInt(r.evaluated || 0)}, перенесено ${fmtInt(r.reused || 0)}</div></td>
           <td class="cqa-col-right cqa-num">${fmtInt(r.total)}</td>
           <td class="cqa-col-right cqa-num">${fmtInt(r.done)}${r.failed ? ` / <span style="color:var(--cqa-no)">${fmtInt(r.failed)}</span>` : ' / 0'}</td>
           <td class="cqa-col-right cqa-num">${fmtClock(dur)}</td>

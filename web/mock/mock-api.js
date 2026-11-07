@@ -1,11 +1,21 @@
 // Демо-режим интерфейса без сервера (?mock=1): выдуманные диалоги из web/mock/*.json, состояние — в памяти вкладки.
 // Повторяет контракт docs/ARCHITECTURE.md. Модель не вызывается: «оценка» в демо-прогоне копирует ответы из
-// готовых демо-оценок — это только для проверки интерфейса, в продукте каждую оценку делает модель.
+// готовых демо-оценок — это только для проверки интерфейса. Перенос повторяет правила продукта.
 
 const BASE = new URL('./', import.meta.url);
 const clone = (x) => (x == null ? x : JSON.parse(JSON.stringify(x)));
 const wait = (ms = 140) => new Promise((r) => setTimeout(r, ms));
 const now = () => { const d = new Date(); return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 19); };
+
+async function fingerprint(c, cfg, model) {
+  const definition = {};
+  for (const k of ['id', 'title', 'type', 'yes', 'no', 'na', 'na_when', 'steps', 'guidance']) definition[k] = c[k] ?? null;
+  Object.assign(definition, { rules: cfg.rules || [], prompt_version: 'p1', model });
+  const canonical = (v) => Array.isArray(v) ? v.map(canonical) : v && typeof v === 'object'
+    ? Object.fromEntries(Object.keys(v).sort().map((k) => [k, canonical(v[k])])) : v;
+  const hash = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(JSON.stringify(canonical(definition))));
+  return [...new Uint8Array(hash)].map((b) => b.toString(16).padStart(2, '0')).join('');
+}
 
 class MockError extends Error {
   constructor(status, message, body) { super(message); this.status = status; this.body = body || { detail: message }; }
@@ -97,6 +107,15 @@ export async function createMockApi() {
   const nextId = (arr) => arr.reduce((m, x) => Math.max(m, +x.id || 0), 0) + 1;
   const cfgOf = (id) => st.checklists.find((c) => +c.id === +id)?.config;
   const label = (c) => `${c.name} · v${c.version}`;
+  // Начальные выдуманные оценки считаем полными, чтобы на них можно было показать перенос.
+  for (const e of st.evals) {
+    e.mode = 'full'; e.evaluated = e.criteria.map((c) => c.id); e.reused = []; e.model_calls = 1;
+    for (const c of e.criteria) {
+      const cfg = cfgOf(e.checklist.id);
+      c.fingerprint = await fingerprint(cfg.criteria.find((x) => x.id === c.id), cfg, e.model);
+      c.reused_from = null;
+    }
+  }
 
   function serveEval(ev) {
     const e = clone(ev);
@@ -127,21 +146,45 @@ export async function createMockApi() {
     return st.evals.filter((e) => e.conversation_id === cid).sort((a, b) => b.id - a.id)[0] || null;
   }
 
-  function makeEval(conv, checklistId, runId, provider) {
-    const ch = st.checklists.find((c) => +c.id === +checklistId);
-    const base = latestEval(conv.id);
+  function latestSuccess(cid, model) {
+    return st.evals.filter((e) => e.conversation_id === cid && e.model === model && e.status === 'ok').sort((a, b) => b.id - a.id)[0] || null;
+  }
+
+  async function prepare({ conversation_ids, dataset_id, checklist_id, provider, mode = 'incremental' }) {
+    if (!['full', 'incremental'].includes(mode)) throw new MockError(422, 'Режим — full или incremental');
+    const ids = conversation_ids?.length ? [...new Set(conversation_ids)] : st.convs.filter((c) => c.dataset_id === dataset_id).map((c) => c.id);
+    if (!ids.length) throw new MockError(422, 'Нет диалогов для оценки');
+    const ch = st.checklists.find((c) => +c.id === +(checklist_id ?? Math.max(...st.checklists.map((x) => x.id))));
+    if (!ch) throw new MockError(422, 'Чек-лист не найден');
+    const p = st.meta.providers.find((x) => x.id === (provider || st.settings.default_provider));
+    if (!p || p.available === false) throw new MockError(422, 'Модель недоступна');
+    const hashes = Object.fromEntries(await Promise.all(ch.config.criteria.map(async (c) => [c.id, await fingerprint(c, ch.config, p.model)])));
+    const items = ids.map((cid) => {
+      if (!st.convs.some((c) => c.id === cid)) throw new MockError(422, 'Диалог не найден');
+      const previous = latestSuccess(cid, p.model);
+      const reused = mode === 'incremental' ? ch.config.criteria.filter((c) => previous?.criteria.some((x) => x.id === c.id && x.fingerprint === hashes[c.id])).map((c) => c.id) : [];
+      return { cid, previous, reused, evaluated: ch.config.criteria.filter((c) => !reused.includes(c.id)).map((c) => c.id) };
+    });
+    return { ch, p, mode, hashes, items };
+  }
+
+  function makeEval(conv, runId, prepared, item) {
+    const { ch, p, mode, hashes } = prepared;
+    const base = item.previous;
     const crits = ch.config.criteria.map((c) => {
       const allowed = allowedAnswers(c);
       const prev = base?.criteria.find((x) => x.id === c.id);
-      const same = prev && prev.title === c.title && allowed.includes(prev.original.answer);
+      const same = item.reused.includes(c.id);
       return { id: c.id, title: c.title, section: c.section, type: c.type, weight: c.weight, na: !!c.na, allowed,
+        fingerprint: hashes[c.id], reused_from: same ? base.id : null,
         original: same ? clone(prev.original) : { answer: c.type === 'flag' ? 'Нет' : allowed[0], explanation: 'Демо-режим: ответ сгенерирован без модели для нового или изменённого критерия.', evidence: [] } };
     });
     const id = nextId(st.evals);
-    const tin = 1900 + Math.round(Math.random() * 400), tout = 1100 + Math.round(Math.random() * 500);
-    const p = st.meta.providers.find((x) => x.id === provider) || st.meta.providers[0];
+    const calls = item.evaluated.length ? 1 : 0;
+    const tin = calls * 2100, tout = item.evaluated.length * 170;
     const ev = { id, run_id: runId, conversation_id: conv.id, checklist: { id: ch.id, name: ch.name, version: ch.version, label: label(ch) },
-      provider: p.id, model: p.model, prompt_version: 'p1', created_at: now(), latency_s: +(6 + Math.random() * 5).toFixed(1),
+      provider: p.id, model: p.model, prompt_version: 'p1', mode, evaluated: item.evaluated, reused: item.reused, model_calls: calls,
+      created_at: now(), latency_s: calls * 8,
       input_tokens: tin, output_tokens: tout, cost_usd: +((tin * p.price_in + tout * p.price_out) / 1e6).toFixed(6), status: 'ok', error: null,
       pii_masked: (conv.transcript || []).flatMap((m) => (m.pii || []).map((s) => ({ n: m.n, type: s.type, label: s.label }))), criteria: crits };
     st.evals.push(ev);
@@ -156,6 +199,10 @@ export async function createMockApi() {
     r.tokens_out = done.reduce((a, e) => a + e.output_tokens, 0);
     r.avg_latency_s = done.length ? +(done.reduce((a, e) => a + e.latency_s, 0) / done.length).toFixed(2) : null;
     r.avg_cost_per_eval = r.done ? +(r.cost_usd / r.done).toFixed(6) : null;
+    r.mode ||= 'full';
+    r.model_calls = done.reduce((a, e) => a + e.model_calls, 0);
+    r.evaluated = done.reduce((a, e) => a + e.evaluated.length, 0);
+    r.reused = done.reduce((a, e) => a + e.reused.length, 0);
     return r;
   }
 
@@ -217,22 +264,39 @@ export async function createMockApi() {
       if (!e) throw new MockError(404, 'Оценка не найдена');
       return serveEval(e);
     },
-    async startRun({ conversation_ids, dataset_id, checklist_id, provider }) {
+    async planRun(body) {
+      await wait();
+      const { ch, mode, hashes, items } = await prepare(body);
+      const criteria = ch.config.criteria.map((c) => {
+        let evaluated = 0, reused = 0, definition_changed = 0, weight_changed = 0;
+        for (const i of items) {
+          evaluated += i.evaluated.includes(c.id); reused += i.reused.includes(c.id);
+          if (i.previous) {
+            const prev = i.previous.criteria.find((x) => x.id === c.id);
+            const changed = prev?.fingerprint !== hashes[c.id];
+            definition_changed += changed;
+            weight_changed += !changed && prev.weight !== c.weight;
+          }
+        }
+        return { id: c.id, title: c.title, evaluated, reused, definition_changed, weight_changed };
+      });
+      return { mode, total: items.length, without_previous: items.filter((i) => !i.previous).length,
+        model_calls: items.filter((i) => i.evaluated.length).length,
+        evaluated: criteria.reduce((a, c) => a + c.evaluated, 0), reused: criteria.reduce((a, c) => a + c.reused, 0), criteria };
+    },
+    async startRun(body) {
       await wait(200);
-      const ids = conversation_ids?.length ? conversation_ids : st.convs.filter((c) => c.dataset_id === dataset_id).map((c) => c.id);
-      if (!ids.length) throw new MockError(422, 'Нет диалогов для оценки');
-      if (!st.checklists.some((c) => +c.id === +checklist_id)) throw new MockError(404, 'Чек-лист не найден');
-      const p = st.meta.providers.find((x) => x.id === provider);
-      if (p && p.available === false) throw new MockError(422, `Модель «${p.label}» не настроена`);
-      const run = { id: nextId(st.runs), status: 'running', checklist_id: +checklist_id, provider: provider || 'haiku', model: p?.model || 'claude-haiku-5-5',
-        dataset_id: dataset_id || null, total: ids.length, done: 0, failed: 0, cost_usd: 0, created_at: now(), finished_at: null,
-        items: ids.map((cid) => ({ conversation_id: cid, status: 'pending', evaluation_id: null, total: null, gross: null, error: null })) };
+      const prepared = await prepare(body);
+      const { ch, p, mode, items } = prepared;
+      const run = { id: nextId(st.runs), status: 'running', checklist_id: ch.id, provider: p.id, model: p.model, mode,
+        dataset_id: body.dataset_id || null, total: items.length, done: 0, failed: 0, cost_usd: 0, created_at: now(), finished_at: null,
+        items: items.map((i) => ({ conversation_id: i.cid, previous_evaluation_id: i.previous?.id ?? null, status: 'pending', evaluation_id: null, total: null, gross: null, error: null })) };
       st.runs.push(run);
       const tick = () => {
         const busy = run.items.find((i) => i.status === 'running');
         if (busy) {
           const conv = st.convs.find((c) => c.id === busy.conversation_id);
-          const ev = serveEval(makeEval(conv, checklist_id, run.id, run.provider));
+          const ev = serveEval(makeEval(conv, run.id, prepared, items.find((i) => i.cid === conv.id)));
           Object.assign(busy, { status: 'ok', evaluation_id: ev.id, total: ev.original.total, gross: ev.original.gross });
           run.done++; run.cost_usd = +(run.cost_usd + ev.cost_usd).toFixed(6);
         }
@@ -249,6 +313,30 @@ export async function createMockApi() {
       const r = st.runs.find((x) => +x.id === +id);
       if (!r) throw new MockError(404, 'Прогон не найден');
       return serveRun(r);
+    },
+    async runDiff(id) {
+      await wait();
+      const r = st.runs.find((x) => +x.id === +id);
+      if (!r) throw new MockError(404, 'Прогон не найден');
+      const titles = new Map(cfgOf(r.checklist_id).criteria.map((c) => [c.id, c.title]));
+      const counts = {};
+      const brief = (e) => { if (!e) return null; const s = serveEval(e); return { id: e.id, total: s.original.total, gross: s.original.gross, status: e.status }; };
+      const items = (r.items || []).map((i) => {
+        const before = st.evals.find((e) => e.id === i.previous_evaluation_id);
+        const after = st.evals.find((e) => e.id === i.evaluation_id);
+        const changes = [];
+        for (const c of before?.criteria || []) if (!titles.has(c.id)) titles.set(c.id, c.title);
+        if (after?.status === 'ok') {
+          const a = Object.fromEntries((before?.criteria || []).map((c) => [c.id, c.original.answer]));
+          const b = Object.fromEntries(after.criteria.map((c) => [c.id, c.original.answer]));
+          for (const cid of new Set([...Object.keys(a), ...Object.keys(b)])) if (a[cid] !== b[cid]) {
+            changes.push({ id: cid, before: a[cid] ?? null, after: b[cid] ?? null });
+            counts[cid] = (counts[cid] || 0) + 1;
+          }
+        }
+        return { conversation_id: i.conversation_id, status: i.status, error: i.error, previous: brief(before), current: brief(after), changes };
+      });
+      return { run_id: r.id, items, criteria: [...titles].map(([cid, title]) => ({ id: cid, title, changed: counts[cid] || 0 })) };
     },
     async runs() { await wait(); return st.runs.map(serveRun).map(({ items, ...r }) => r); },
     async checklists() {

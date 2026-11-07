@@ -44,6 +44,7 @@ class ChecklistEditor extends CqaElement {
     this.s = {
       list: [], selId: this.getAttribute('checklist-id'), loaded: null, parent: null, draft: null, open: new Set(),
       validation: null, validating: false, note: '', meta: null, datasets: [], applyDataset: null, applyProvider: null, run: null, justSaved: null,
+      full: false, plan: null, planError: null, diff: null,
     };
     this.validateSoon = debounce(() => this.validate(), 350);
     this.innerHTML = '<div class="cqa-loading"><span class="cqa-spinner cqa-spinner--lg"></span>Загружаю чек-листы…</div>';
@@ -86,6 +87,7 @@ class ChecklistEditor extends CqaElement {
       if (!p || FIELDS.some((f) => !same(normField(c, f), normField(p, f)))) this.s.open.add(c.id);
     }
     this.render();
+    this.loadPlan();
     if (history.replaceState) history.replaceState(null, '', `#/checklist?id=${encodeURIComponent(loaded.id)}`);
   }
 
@@ -258,6 +260,7 @@ class ChecklistEditor extends CqaElement {
           <span>${fin ? `${icon('check')} Готово` : '<span class="cqa-spinner"></span> Модель оценивает диалоги…'}</span>
           <span>Оценено <b>${fmtInt(done)}</b> из <b>${fmtInt(total)}</b></span>${failed ? `<span style="color:var(--cqa-no)">Ошибок <b>${fmtInt(failed)}</b></span>` : ''}
           <span>${icon('coins')} <b>${fmtMoney(run.cost_usd || 0)}</b></span>
+          <span>Вызовов модели: <b>${fmtInt(run.model_calls || 0)}</b>; критериев оценено: <b>${fmtInt(run.evaluated || 0)}</b>, перенесено: <b>${fmtInt(run.reused || 0)}</b></span>
           <span>${icon('clock')} <b>${fmtClock(secondsBetween(run.created_at, fin ? run.finished_at : null))}</b></span>
         </div>
         <div class="cqa-progress ${fin ? '' : 'is-running'}"><div class="cqa-progress-fill" style="width:${pct}%"></div></div>
@@ -267,16 +270,71 @@ class ChecklistEditor extends CqaElement {
     return `<div class="cqa-apply" ${justSaved ? 'style="border-color:var(--cqa-green-500);box-shadow:var(--cqa-focus)"' : ''}>
       <div class="cqa-panel-title" style="margin:0">${icon('play')}Применить версию v${esc(loaded.version)} к набору диалогов
         ${justSaved ? '<span class="cqa-badge cqa-badge--yes">версия сохранена</span>' : ''}</div>
+      <label class="cqa-row"><input type="checkbox" data-f="apply-full" ${this.s.full ? 'checked' : ''} ${run && !fin ? 'disabled' : ''}>Переоценить все критерии заново</label>
+      ${this.planHtml()}
       <div class="cqa-row" style="align-items:flex-end">
         <label class="cqa-field"><span class="cqa-label">Набор</span><select class="cqa-select cqa-select--sm" data-f="apply-dataset" ${run && !fin ? 'disabled' : ''}>
           ${datasets.map((d) => `<option value="${esc(d.id)}" ${d.id === this.s.applyDataset ? 'selected' : ''}>${esc(d.id)} · ${fmtInt(d.total)} ${plural(d.total, 'диалог', 'диалога', 'диалогов')}</option>`).join('') || '<option value="">нет наборов — импортируйте в «Диалогах»</option>'}</select></label>
         <label class="cqa-field"><span class="cqa-label">Модель</span><select class="cqa-select cqa-select--sm" data-f="apply-provider" ${run && !fin ? 'disabled' : ''}>
           ${providers.map((p) => `<option value="${esc(p.id)}" ${p.id === this.s.applyProvider ? 'selected' : ''} ${p.available === false ? 'disabled' : ''}>${esc(p.label || p.id)}</option>`).join('')}</select></label>
-        <button type="button" class="cqa-btn cqa-btn--primary" data-act="apply" ${!datasets.length || this.isDirty() || (run && !fin) ? 'disabled' : ''} title="${this.isDirty() ? 'Сначала сохраните изменения' : ''}">${icon('play')}Применить к набору</button>
+        <button type="button" class="cqa-btn cqa-btn--primary" data-act="apply" ${!datasets.length || !this.s.plan || this.isDirty() || (run && !fin) ? 'disabled' : ''} title="${this.isDirty() ? 'Сначала сохраните изменения' : ''}">${icon('play')}Применить к набору</button>
         ${this.isDirty() ? '<span class="cqa-faint" style="font-size:12.5px">сначала сохраните изменения как новую версию</span>' : ''}
       </div>
       ${progress}
+      ${fin ? this.diffHtml() : ''}
     </div>`;
+  }
+
+  runBody() {
+    return { dataset_id: this.s.applyDataset, checklist_id: +this.s.loaded.id, provider: this.s.applyProvider, mode: this.s.full ? 'full' : 'incremental' };
+  }
+
+  async loadPlan() {
+    const seq = this.planSeq = (this.planSeq || 0) + 1;
+    this.s.plan = null; this.s.planError = null;
+    const refresh = () => { const box = this.part('apply'); if (box) box.innerHTML = this.applyHtml(); };
+    refresh();
+    if (!this.s.applyDataset || !this.s.applyProvider) return;
+    try {
+      const plan = await this.api.planRun(this.runBody());
+      if (!this.alive || seq !== this.planSeq) return;
+      this.s.plan = plan;
+    } catch (e) {
+      if (!this.alive || seq !== this.planSeq) return;
+      this.s.planError = e.message;
+    }
+    refresh();
+  }
+
+  planHtml() {
+    if (this.isDirty()) return '<p class="cqa-faint">Сохраните изменения — покажем план применения новой версии.</p>';
+    if (this.s.planError) return `<div class="cqa-error-box">План недоступен: ${esc(this.s.planError)}</div>`;
+    const p = this.s.plan;
+    if (!p) return '<p class="cqa-faint">Загружаю план применения…</p>';
+    const lines = [];
+    if (p.mode === 'full') lines.push(`Все критерии оценим заново в ${fmtInt(p.total)} диалогах.`);
+    else {
+      for (const c of p.criteria) {
+        if (c.definition_changed) lines.push(`Изменено определение критерия ${esc(c.id)} или общие инструкции — переоценим его в ${fmtInt(c.definition_changed)} диалогах.`);
+        if (c.weight_changed) lines.push(`Критерий ${esc(c.id)}: изменён только вес — пересчёт в ${fmtInt(c.weight_changed)} диалогах без модели.`);
+      }
+      if (p.without_previous) lines.push(`Без прошлой успешной оценки этой моделью: ${fmtInt(p.without_previous)} диалогов — оценим полностью.`);
+      if (!p.model_calls) lines.push('Определения не менялись — пересчитаем итоги без вызова модели.');
+      else if (!lines.length) lines.push(`Оценим изменённые критерии в ${fmtInt(p.model_calls)} диалогах.`);
+    }
+    return `<div class="cqa-note cqa-note--mint"><div>${lines.map((l) => `<div>${l}</div>`).join('')}<div>План: вызовов модели ${fmtInt(p.model_calls)} (без повторов при ошибках), критериев оценим ${fmtInt(p.evaluated)}, перенесём ${fmtInt(p.reused)}.</div></div></div>`;
+  }
+
+  diffHtml() {
+    if (this.s.diffError) return `<div class="cqa-error-box">Не удалось загрузить изменения: ${esc(this.s.diffError)}</div>`;
+    const d = this.s.diff;
+    if (!d) return '<p class="cqa-faint">Загружаю изменения…</p>';
+    const value = (v) => v == null ? '—' : esc(v);
+    const gross = (v) => v == null ? '—' : v ? 'да' : 'нет';
+    return `<div class="cqa-panel cqa-panel-pad"><h3>Что изменилось</h3><p class="cqa-faint">Сравнение исходных ответов. Апелляции и решения проверяющих остаются у своих оценок.</p>
+      <p>${d.criteria.filter((c) => c.changed).map((c) => `${esc(c.id)} · ${esc(c.title)}: изменилось ответов ${fmtInt(c.changed)}`).join('; ') || 'Ответы критериев не изменились.'}</p>
+      <div class="cqa-table-wrap"><table class="cqa-table"><thead><tr><th>Диалог</th><th>Оценка</th><th>Итог было → стало</th><th>Грубая ошибка</th><th>Ответы было → стало</th></tr></thead>
+      <tbody>${d.items.map((i) => `<tr><td><a href="#/c/${encodeURIComponent(i.conversation_id)}${i.current ? `?e=${encodeURIComponent(i.current.id)}` : ''}">${esc(i.conversation_id)}</a></td><td>${value(i.previous?.id)} → ${value(i.current?.id)}</td><td>${value(i.previous?.total)} → ${value(i.current?.total)}</td><td>${gross(i.previous?.gross)} → ${gross(i.current?.gross)}</td><td>${i.error ? esc(i.error) : i.changes.map((c) => `${esc(c.id)}: ${value(c.before)} → ${value(c.after)}`).join('; ') || 'без изменений'}</td></tr>`).join('')}</tbody></table></div></div>`;
   }
 
   refreshChrome() {
@@ -367,7 +425,8 @@ class ChecklistEditor extends CqaElement {
     const dataset_id = this.s.applyDataset;
     if (!dataset_id) { toast('Выберите набор', 'warn'); return; }
     try {
-      const res = await this.api.startRun({ dataset_id, checklist_id: +this.s.loaded.id, provider: this.s.applyProvider });
+      this.s.diff = null; this.s.diffError = null;
+      const res = await this.api.startRun(this.runBody());
       const runId = res?.run_id ?? res?.id;
       this.s.run = { id: runId, status: 'running', total: this.s.datasets.find((d) => d.id === dataset_id)?.total || 0, done: 0, failed: 0, cost_usd: 0, created_at: new Date().toISOString(), dataset_id };
       const ap = this.part('apply'); if (ap) ap.innerHTML = this.applyHtml();
@@ -377,6 +436,16 @@ class ChecklistEditor extends CqaElement {
         this.s.run = { ...run, dataset_id };
         const box = this.part('apply'); if (box) box.innerHTML = this.applyHtml();
         if (isRunFinished(run)) {
+          this.api.runDiff(run.id).then((diff) => {
+            if (!this.alive || this.s.run?.id !== run.id) return;
+            this.s.diff = diff;
+            const box = this.part('apply'); if (box) box.innerHTML = this.applyHtml();
+          }).catch((e) => {
+            if (!this.alive || this.s.run?.id !== run.id) return;
+            this.s.diffError = e.message;
+            const box = this.part('apply'); if (box) box.innerHTML = this.applyHtml();
+          });
+          this.loadPlan();
           toast(`Чек-лист v${this.s.loaded.version} применён: ${fmtInt(run.done)} ${plural(run.done, 'оценка', 'оценки', 'оценок')} · ${fmtMoney(run.cost_usd || 0)}`, 'info', 6000);
           emit('cqa-data-changed', { run: run.id });
         }
@@ -449,8 +518,13 @@ class ChecklistEditor extends CqaElement {
   onInput(e, isChange = false) {
     const t = e.target;
     if (t.dataset.part === 'note') { this.s.note = t.value; return; }
-    if (t.dataset.f === 'apply-dataset') { this.s.applyDataset = t.value; return; }
-    if (t.dataset.f === 'apply-provider') { this.s.applyProvider = t.value; return; }
+    if (t.dataset.f?.startsWith('apply-')) {
+      if (!isChange) return;
+      if (t.dataset.f === 'apply-dataset') this.s.applyDataset = t.value;
+      if (t.dataset.f === 'apply-provider') this.s.applyProvider = t.value;
+      if (t.dataset.f === 'apply-full') this.s.full = t.checked;
+      this.loadPlan(); return;
+    }
     const path = t.dataset.path;
     if (!path) return;
     const discrete = t.type === 'checkbox' || t.tagName === 'SELECT';

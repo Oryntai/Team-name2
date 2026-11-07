@@ -23,8 +23,9 @@ API организаторов (GET ?group_id=…) ─┐
 ```
 
 Модель решает только смысл (что ответить по критерию и на какие реплики опереться). Код — только арифметику,
-которую задаёт сам чек-лист, и хранение. Каждая оценка — живой вызов модели с записью в журнал
-(модель, версия промпта и чек-листа, время, токены, цена). Готовых ответов по id диалога нет.
+которую задаёт сам чек-лист, и хранение. Оценка содержит новые ответы модели и/или перенос из прошлой успешной
+оценки той же моделью при совпадении отпечатка определения. Журнал хранит модель, версии, вызовы, время,
+токены, цену и число перенесённых критериев. Готовых ответов по id диалога нет.
 
 ## Модули
 
@@ -95,10 +96,32 @@ API организаторов (GET ?group_id=…) ─┐
   значений этого критерия → модель физически не может вернуть недопустимый ответ.
   По критерию: `explanation` (коротко, по-русски, со ссылками [n]), `answer`, `evidence` (номера реплик; при «Нет» —
   участок, где действие ожидалось).
-- `evaluate(record, config, provider) -> {"status", "error", "answers": {id: {"answer", "explanation", "evidence"}},
+- `evaluate(record, config, provider, *, only=None) -> {"status", "error", "answers": {id: {"answer", "explanation", "evidence", "fingerprint", "reused_from"}},
   "provider", "model", "prompt_version", "latency_s", "input_tokens", "output_tokens", "cost_usd", "pii_masked", "raw"}`.
 - Провайдеры: `haiku` (claude-haiku-5-5), `sonnet` (claude-sonnet-5-5), `local` (OpenAI-совместимый сервер:
   `CQA_LOCAL_BASE_URL`, `CQA_LOCAL_MODEL`), `fake` — только для тестов, в интерфейсе не показывается.
+
+### Инкрементальное применение
+
+`only=["05"]` ограничивает схему и возвращаемые ответы этим списком. Системный промпт остаётся полным,
+пользователь получает «Оцени только критерии: 05. Остальные не оценивай». Пустой `only` не вызывает модель.
+`fake` строит ответ по схеме и тоже поддерживает частичную оценку.
+
+Отпечаток — SHA-256 канонического JSON: `id`, `title`, `type`, `yes`, `no`, `na`, `na_when`, `steps`
+(значения и тексты), `guidance`, общие `rules`, `PROMPT_VERSION`, имя модели. Вес и секция не входят.
+`no` включён дополнительно к перечислению полей, поскольку этот текст тоже попадает в промпт.
+
+В `incremental` при старте для каждого диалога фиксируется последняя успешная оценка той же моделью,
+любой версии чек-листа (`run_items.previous_evaluation_id`). При совпадении сохранённого отпечатка
+переносим исходный ответ, объяснение и доказательства, устанавливая `reused_from` в id этой оценки.
+Остальные критерии оцениваем одним вызовом с `only`. Нет прошлой оценки → оцениваем все критерии.
+Нет изменений определений → создаём новую оценку без модели, с нулевой стоимостью и токенами.
+Итог всегда считает существующий `scoring.score` по новой конфигурации. `full` переоценивает всё.
+Повторы с `RETRY_PAUSES` сохраняются; вызовы, стоимость и токены суммируются по всем попыткам.
+Решения проверяющего и апелляции не переносятся: они остаются у конкретной оценки.
+
+Старые оценки без сохранённых отпечатков переоцениваются консервативно: совпадение определения доказать нельзя.
+План — снимок текущей базы без запуска и записи; при новых оценках между планом и стартом он может измениться.
 
 ## База (SQLite, `var/cqa.db`)
 
@@ -107,14 +130,22 @@ settings(key PK, value)
 datasets(id PK, source, fetched_at, total)
 conversations(id PK, dataset_id, channel, language, transcript JSON, audio_url, imported_at)
 checklists(id PK, name, version, parent_id, note, config JSON, created_at)
-runs(id PK, created_at, finished_at, status, checklist_id, provider, model, total, done, failed, cost_usd)
+runs(id PK, created_at, finished_at, status, checklist_id, provider, model, total, done, failed, cost_usd, mode)
 evaluations(id PK, run_id, conversation_id, checklist_id, created_at, provider, model, prompt_version, status, error,
-            latency_s, input_tokens, output_tokens, cost_usd, answers JSON, pii_masked JSON, raw, total, gross)
+            latency_s, input_tokens, output_tokens, cost_usd, answers JSON, pii_masked JSON, raw, total, gross,
+            mode, evaluated JSON, reused JSON, model_calls)
+run_items(run_id, pos, conversation_id, status, evaluation_id, error, previous_evaluation_id)
 appeals(id PK, evaluation_id, criterion_id, comment, created_at, status open|confirmed|changed,
         new_answer, reason, decided_at)
 ```
 Финальные ответы = ответы модели, поверх — решения проверяющего со статусом `changed`. Итог считается заново
 из ответов при каждом чтении (`scoring.score`), в `evaluations.total` — исходный итог для списка.
+`mode`: `full|incremental`; `evaluated` и `reused` у оценки — списки id критериев (запрошенных у модели сейчас
+и перенесённых соответственно). При ошибках `evaluated` всё равно показывает запрошенные критерии.
+`model_calls` — число попыток `judge.evaluate` с непустой схемой, включая неуспешные; внутренние повторы SDK
+не видны этому счётчику. В `answers[id]` сохраняются `fingerprint` и `reused_from` (id оценки или null).
+На старых базах отсутствующие колонки добавляются через `ALTER TABLE … ADD COLUMN`; историческим строкам
+назначаются `mode=full`, пустые списки и `model_calls=0` (историческое число попыток неизвестно).
 
 ## HTTP API (`/api`, JSON)
 
@@ -128,8 +159,10 @@ appeals(id PK, evaluation_id, criterion_id, comment, created_at, status open|con
 | `GET /api/conversations` | `?dataset_id=&language=&channel=` | `[{"id","dataset_id","channel","language","n_replies","duration","latest": {"evaluation_id","checklist_id","checklist_label","status","total","final_total","gross","created_at"} \| null, "appeals": {"open","decided"}}]` |
 | `GET /api/conversations/{id}` | — | `{"id","dataset_id","channel","language","audio_src" \| null, "transcript": [{"n","timestamp","speaker","text","audio_offset" \| null,"pii": [{"start","end","type","label"}]}], "evaluations": [{"evaluation_id","checklist_label","provider","model","created_at","status","total","final_total","gross"}]}` |
 | `GET /api/evaluations/{id}` | — | см. ниже |
-| `POST /api/runs` | `{"conversation_ids"?: [...], "dataset_id"?, "checklist_id", "provider"}` | `{"run_id"}` (оценка идёт в фоне) |
-| `GET /api/runs/{id}` | — | `{"id","status","checklist_id","checklist_label","provider","model","total","done","failed","cost_usd","created_at","finished_at","items": [{"conversation_id","status","evaluation_id","total","gross","error"}]}` |
+| `POST /api/runs` | `{"conversation_ids"?: [...], "dataset_id"?, "checklist_id"?, "provider"?, "mode"?: "incremental"\|"full"}` | `{"run_id"}` (оценка идёт в фоне); режим по умолчанию `incremental` |
+| `POST /api/runs/plan` | те же поля, что у запуска | `{"mode","total","without_previous","model_calls","evaluated","reused","criteria": [{"id","title","evaluated","reused","definition_changed","weight_changed"}]}`; без запуска и записи |
+| `GET /api/runs/{id}` | — | `{"id","status","mode","checklist_id","checklist_label","provider","model","total","done","failed","cost_usd","model_calls","evaluated","reused","created_at","finished_at","items": [{"conversation_id","status","evaluation_id","total","gross","error"}]}` |
+| `GET /api/runs/{id}/diff` | — | `{"run_id","items": [{"conversation_id","status","error","previous": {"id","total","gross","status"}\|null,"current": {"id","total","gross","status"}\|null,"changes": [{"id","before","after"}]}],"criteria": [{"id","title","changed"}]}` |
 | `GET /api/runs` | — | журнал: `[{… как выше без items, "avg_cost_per_eval","avg_latency_s","tokens_in","tokens_out"}]` |
 | `GET /api/checklists` | — | `[{"id","name","version","parent_id","note","created_at","n_criteria"}]` |
 | `GET /api/checklists/{id}` | — | `{"id","name","version","parent_id","note","created_at","config"}` |
@@ -145,10 +178,12 @@ appeals(id PK, evaluation_id, criterion_id, comment, created_at, status open|con
 {"id": 12, "run_id": 3, "conversation_id": "p1-ru-025",
  "checklist": {"id": 1, "name": "…", "version": 1, "label": "Чек-лист качества чатов · v1"},
  "provider": "haiku", "model": "claude-haiku-5-5", "prompt_version": "p1", "created_at": "…",
+ "mode": "incremental", "evaluated": ["05"], "reused": ["01","02","03","04","06","07","08"], "model_calls": 1,
  "latency_s": 8.9, "input_tokens": 2100, "output_tokens": 1500, "cost_usd": 0.00096,
  "status": "ok", "error": null, "pii_masked": [{"n": 5, "type": "iin", "label": "[ИИН скрыт]"}],
  "criteria": [
    {"id": "04", "title": "…", "section": "…", "type": "scale", "weight": 20, "na": true, "allowed": ["20","15","10","5","0","N/A"],
+    "reused_from": 11, "fingerprint": "sha256…",
     "original": {"answer": "N/A", "explanation": "…", "evidence": [3, 4]},
     "final_answer": "N/A",
     "appeal": null,
@@ -158,6 +193,14 @@ appeals(id PK, evaluation_id, criterion_id, comment, created_at, status open|con
  "original": {"total": 93.08, "gross": false, "sections": [{"name": "…", "points_eff": 30.77, "max_eff": 38.46, "percent": 80.0}]},
  "final": {"total": 93.08, "gross": false, "sections": ["…"]}}
 ```
+
+В плане `evaluated`, `reused`, `definition_changed`, `weight_changed` у критерия — числа диалогов.
+`definition_changed` учитывает также общие rules, версию промпта, новые критерии и отсутствие сохранённого
+отпечатка в прошлой оценке; диалоги совсем без прошлой оценки вынесены в `without_previous`.
+`weight_changed` — изменённый вес при совпавшем определении. `model_calls` плана — число диалогов,
+для которых нужен вызов, без возможных повторов. В ответе прогона `evaluated` и `reused` — суммарные числа
+критериев, `model_calls` включает неудачные попытки. Diff сравнивает исходные ответы и итоги, без апелляций;
+добавление/удаление ответа обозначается null, неуспешные и незавершённые оценки не дают ложных изменений ответов.
 
 ## Интерфейс (`web/`)
 
