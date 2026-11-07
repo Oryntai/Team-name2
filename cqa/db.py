@@ -69,6 +69,12 @@ CREATE TABLE IF NOT EXISTS fairness_calls(
   input_tokens INTEGER, output_tokens INTEGER, cache_read_tokens INTEGER, cache_write_tokens INTEGER,
   cost_usd REAL, request TEXT NOT NULL, response TEXT);
 CREATE INDEX IF NOT EXISTS fairness_calls_experiment ON fairness_calls(experiment_id);
+CREATE TABLE IF NOT EXISTS calibrations(
+  id INTEGER PRIMARY KEY AUTOINCREMENT, conversation_id TEXT NOT NULL, evaluation_id INTEGER NOT NULL,
+  checklist_id INTEGER NOT NULL, reviewer TEXT, created_at TEXT NOT NULL, answers TEXT NOT NULL, comment TEXT,
+  FOREIGN KEY(conversation_id) REFERENCES conversations(id),
+  FOREIGN KEY(evaluation_id) REFERENCES evaluations(id), FOREIGN KEY(checklist_id) REFERENCES checklists(id));
+CREATE INDEX IF NOT EXISTS calibrations_conv ON calibrations(conversation_id);
 """
 
 
@@ -437,6 +443,39 @@ class DB:
         for row in self.q("SELECT id, data FROM insights"):
             if _json(row["data"], {}).get("status") in ("pending", "running"):
                 self.update_insight(row["id"], {"data": {"status": "error", "error": "Разбор прерван перезапуском сервера."}})
+
+    # --- калибровки ---
+    def calibration_evaluation(self, cid: str, checklist_id: int | None = None) -> dict | None:
+        sql = "SELECT id FROM evaluations WHERE conversation_id=? AND status='ok'"
+        args: list = [cid]
+        if checklist_id is not None:
+            sql += " AND checklist_id=?"
+            args.append(checklist_id)
+        row = self.one(sql + " ORDER BY id DESC LIMIT 1", args)
+        return self.evaluation(row["id"]) if row else None
+
+    def create_calibration(self, ev: dict, answers: dict[str, str], reviewer: str, comment: str) -> dict:
+        cid = self.ex("INSERT INTO calibrations(conversation_id, evaluation_id, checklist_id, reviewer, created_at, "
+                      "answers, comment) VALUES(?,?,?,?,?,?,?)",
+                      (ev["conversation_id"], ev["id"], ev["checklist_id"], reviewer, now(),
+                       json.dumps(answers, ensure_ascii=False), comment))
+        row = self.one("SELECT * FROM calibrations WHERE id=?", (cid,))
+        row["answers"] = _json(row["answers"], {})
+        return row
+
+    def list_calibrations(self, conversation_id: str | None = None, dataset_id: str | None = None) -> list[dict]:
+        sql = "SELECT k.* FROM calibrations k JOIN conversations c ON c.id=k.conversation_id WHERE 1=1"
+        args: list = []
+        if conversation_id is not None:
+            sql += " AND k.conversation_id=?"
+            args.append(conversation_id)
+        if dataset_id is not None:
+            sql += " AND c.dataset_id=?"
+            args.append(dataset_id)
+        rows = self.q(sql + " ORDER BY k.id DESC", args)
+        for row in rows:
+            row["answers"] = _json(row["answers"], {})
+        return rows
 
     # --- апелляции ---
     def create_appeal(self, evaluation_id: int, criterion_id: str, comment: str) -> int:

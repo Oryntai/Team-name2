@@ -47,6 +47,7 @@ API организаторов (GET ?group_id=…) ─┐
 | `cqa/audio.py` | прокси записи звонка (CORS, свежая подписанная ссылка), смещение реплики в записи | сервер |
 | `cqa/callmetrics.py` | справочные метрики звонка по ISO-меткам, без модели и влияния на итог | сервер |
 | `cqa/analytics.py` | аналитика и CSV по последним успешным оценкам, только чтение базы | сервер |
+| `cqa/calibrations.py` | слепая оценка человека, сравнение с исходными ответами ИИ и сводка согласия | сервер |
 | `cqa/runner.py` | пакетные прогоны в фоне, прогресс, журнал | сервер |
 | `cqa/api.py`, `cqa/__main__.py` | FastAPI, раздача `web/` | сервер |
 | `web/` | интерфейс: HTML/CSS/JS без сборки, веб-компоненты `cqa-*` | интерфейс |
@@ -171,6 +172,7 @@ asks(id PK, created_at, question, answer, refs JSON, model, cost_usd, input_toke
      status pending|ok|error, error)
 criterion_test_calls(id PK, created_at, conversation_id, checklist_id, criteria JSON, provider, model,
                      status, error, latency_s, input_tokens, output_tokens, cost_usd)
+calibrations(id PK, conversation_id, evaluation_id, checklist_id, reviewer, created_at, answers JSON, comment)
 ```
 Финальные ответы = ответы модели, поверх — решения проверяющего со статусом `changed`. Итог считается заново
 из ответов при каждом чтении (`scoring.score`), в `evaluations.total` — исходный итог для списка.
@@ -199,6 +201,8 @@ criterion_test_calls(id PK, created_at, conversation_id, checklist_id, criteria 
 | `POST /api/conversations/{id}/translate` | без тела; `{"provider":"fake"}` только при `CQA_ALLOW_FAKE=1` | `{"translation": {"conversation_id","lang":"ru","created_at","model","cost_usd","data":[{"turn":1,"text":"…"}]}, "cost_usd", "model_calls"}` |
 | `GET /api/conversations/{id}/translation` | — | такой же ответ; `translation: null`, если перевода ещё нет |
 | `GET /api/evaluations/{id}` | — | см. ниже |
+| `POST /api/calibrations` | `{"conversation_id", "answers": {"criterion_id": "ответ"}, "reviewer"?, "comment"?, "checklist_id"?}` | `201`: сохранённая калибровка + `criteria: [{id,title,human_answer,model_answer,matched,explanation,evidence}]`, `human/model: {total,gross}`, `delta` |
+| `GET /api/calibrations` | `?conversation_id=&dataset_id=` (фильтры совместимы) | `{"items": [сравнения], "summary": {count,criteria: [{checklist_id,id,title,matched,total}],scored_count,mean_delta,mean_absolute_delta}}` |
 | `POST /api/runs` | `{"conversation_ids"?: [...], "dataset_id"?, "checklist_id"?, "provider"?, "mode"?: "incremental"\|"full"}` | `{"run_id"}` (оценка идёт в фоне); режим по умолчанию `incremental` |
 | `POST /api/insights/run` | `{"conversation_ids"?: [...], "dataset_id"?: "DEV"}` | `202 {"insight_ids": [...], "conversation_ids": [...]}`; разбор в фоне |
 | `GET /api/insights/{conversation_id}` | — | последний разбор с метаданными или `null`; неизвестный диалог — `404` |
@@ -303,6 +307,16 @@ criterion_test_calls(id PK, created_at, conversation_id, checklist_id, criteria 
  "original": {"total": 93.08, "gross": false, "sections": [{"name": "…", "points_eff": 30.77, "max_eff": 38.46, "percent": 80.0}]},
  "final": {"total": 93.08, "gross": false, "sections": ["…"]}}
 ```
+
+Калибровка берёт последнюю успешную оценку диалога по `checklist_id`; без него — последнюю успешную
+оценку любой версии. Все ответы обязательны, только строки из `allowed_answers`, лишние критерии запрещены
+(`422`). Нет диалога — `404`; нет успешной полной оценки — `409`. Сравниваются исходные ответы ИИ,
+без решений по апелляциям. Оба итога считает `scoring.score`; калибровка не меняет оценки, прогоны,
+прецеденты и выгрузку результатов, не вызывает модель. В карточке отправляется id выбранного чек-листа.
+Сохранённая калибровка закрепляет `evaluation_id`: новый прогон не меняет историю сравнения.
+Сводка разделяет критерии разных версий чек-листа. `mean_delta` — среднее «человек минус ИИ»,
+`mean_absolute_delta` — средняя абсолютная разница. Если один из итогов отсутствует, `delta=null`;
+такие записи участвуют в согласии по критериям, но исключаются из средних (`scored_count`).
 
 В плане `evaluated`, `reused`, `definition_changed`, `weight_changed` у критерия — числа диалогов.
 `definition_changed` учитывает также общие rules, версию промпта, новые критерии и отсутствие сохранённого

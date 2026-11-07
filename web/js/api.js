@@ -68,6 +68,8 @@ function httpClient(base) {
     insight: (id) => req('GET', `/insights/${enc(id)}`),
     insights: (params) => req('GET', `/insights${q(params)}`),
     startInsights: (body) => req('POST', '/insights/run', body),
+    calibrations: (params) => req('GET', `/calibrations${q(params)}`),
+    createCalibration: (body) => req('POST', '/calibrations', body),
     startRun: (body) => req('POST', '/runs', body),
     planRun: (body) => req('POST', '/runs/plan', body),
     runDiff: (id) => req('GET', `/runs/${enc(id)}/diff`),

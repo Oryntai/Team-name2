@@ -657,6 +657,24 @@ cqa-card { container-type: inline-size; container-name: cqa-card; }
   .cqa-btn:active:not(:disabled), .cqa-dd-btn:active:not(:disabled) { transform: none; }
 }
 
+/* Калибровка: ответы и подробности без рамок. Меню — общий dropdown.js. */
+.cqa-calibration h2 { margin: 0; font-size: 20px; }
+.cqa-calibration-question { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 16px; align-items: start; padding: 12px 0; }
+.cqa-calibration-question .cqa-dd { min-width: 120px; }
+.cqa-calibration-question .cqa-dd-btn { border: 0; box-shadow: none; background: var(--cqa-mint-50); }
+.cqa-calibration-question summary { min-height: 32px; align-items: center; }
+.cqa-calibration-definition { font-size: 13px; line-height: 1.55; color: var(--cqa-text-2); }
+.cqa-calibration-definition p { margin: 8px 0; }
+.cqa-calibration-signature { margin: 12px 0 20px; }
+.cqa-calibration-signature .cqa-field { margin-top: 12px; }
+.cqa-calibration-table { overflow-x: auto; }
+.cqa-calibration-table .cqa-table th { background: white; }
+.cqa-calibration-table .cqa-table td { border: 0; vertical-align: top; }
+.cqa-calibration-table .cqa-table td:first-child { width: 100%; }
+.cqa-calibration-table .cqa-table td:not(:first-child) { white-space: nowrap; }
+.cqa-calibration-match[data-matched="true"] { color: var(--cqa-yes); }
+.cqa-calibration-match[data-matched="false"] { color: var(--cqa-no); }
+
 /* ===== Без «квадратиков» (владелец, 7.11): белый фон, разделы — воздух и тонкие линии вместо рамок и теней ===== */
 :root { --cqa-bg: #ffffff; }
 .cqa-panel { background: transparent; border: 0; border-radius: 0; box-shadow: none; }
