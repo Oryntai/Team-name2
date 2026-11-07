@@ -944,3 +944,76 @@ cqa-card .cqa-pop { border: 0; box-shadow: none; }
 @media (prefers-reduced-motion: reduce) {
   cqa-appeals .cqa-detail, .cqa-appeal-form, .cqa-score-dialog[open], .cqa-score-dialog.is-closing { animation: none; }
 }
+
+/* Чек-лист и журнал: короткие строки, подробности по клику. */
+cqa-checklist-editor, cqa-journal { background: #fff; }
+cqa-checklist-editor .cqa-panel, cqa-journal .cqa-panel,
+cqa-checklist-editor .cqa-ec, cqa-checklist-editor .cqa-ec.is-open {
+  border: 0; box-shadow: none; border-radius: 0; background: #fff;
+}
+cqa-checklist-editor .cqa-btn, cqa-journal .cqa-btn { border-color: transparent; box-shadow: none; }
+.cqa-checklist-toolbar { position: sticky; top: 0; z-index: 30; background: #fff; padding-block: 10px; align-items: center; gap: 12px; }
+cqa-app .cqa-checklist-toolbar { top: var(--cqa-header-h); }
+cqa-checklist-editor .cqa-ec { scroll-margin-top: calc(var(--cqa-header-h) + 110px); }
+.cqa-checklist-toolbar h1 { font-size: 21px; }
+.cqa-checklist-toolbar .cqa-page-actions { gap: 4px; }
+.cqa-checklist-toolbar .cqa-btn { padding-inline: 8px; font-size: 12px; }
+.cqa-checklist-toolbar .cqa-dd { min-width: 115px; }
+cqa-checklist-editor .cqa-editor { gap: 4px; }
+cqa-checklist-editor .cqa-editor-summary { padding: 10px 0; font-size: 12px; gap: 8px 16px; }
+.cqa-draft-status { color: var(--cqa-muted); }
+cqa-checklist-editor .cqa-apply { padding: 0; border: 0; background: #fff; gap: 4px; }
+.cqa-apply-options .cqa-dd { min-width: 130px; }
+.cqa-apply-options .cqa-dd-btn { border-color: transparent; box-shadow: none; }
+.cqa-apply-options .cqa-inline-field { gap: 4px; }
+.cqa-plan-detail { padding: 10px 0; color: var(--cqa-muted); font-size: 12px; }
+.cqa-fold-toggle { display: flex; align-items: center; gap: 8px; width: 100%; padding: 10px 0;
+  font: inherit; font-size: 13px; font-weight: 600; color: var(--cqa-text-2); text-align: left; border: 0; background: none; cursor: pointer; }
+.cqa-fold-toggle:hover { color: var(--cqa-green-600); }
+.cqa-fold-toggle:focus-visible, cqa-checklist-editor .cqa-ec-head:focus-visible { outline: 2px solid var(--cqa-green-600); outline-offset: 2px; }
+.cqa-fold-toggle > .cqa-icon { transition: transform .144s ease-out; }
+.cqa-fold-toggle[aria-expanded="true"] > .cqa-icon { transform: rotate(90deg); transition-duration: .18s; }
+.cqa-editor-note { padding: 8px 0 14px; }
+.cqa-editor-note > .cqa-input { max-width: 420px; }
+.cqa-editor-note .cqa-inline-field .cqa-input { width: 80px; }
+cqa-checklist-editor .cqa-editor-head { padding: 8px 0 14px; }
+.cqa-editor-fold > .cqa-ask-reveal.is-open > div:has(.cqa-dd.is-open) { overflow: visible; }
+.cqa-editor-section { margin: 16px 0 4px; color: var(--cqa-muted); font-weight: 500; font-size: 12px; }
+.cqa-editor-section[hidden] { display: none; }
+cqa-checklist-editor .cqa-ec-head { width: 100%; grid-template-columns: 16px 28px minmax(0, 1fr) auto;
+  padding: 12px 4px; border: 0; border-radius: 0; background: #fff; color: inherit; font: inherit; text-align: left; }
+cqa-checklist-editor .cqa-ec-head:hover { background: var(--cqa-surface-2); }
+cqa-checklist-editor .cqa-ec-head .cqa-crit-id { padding: 0; background: none; color: var(--cqa-muted); font-weight: 500; }
+cqa-checklist-editor .cqa-ec-title { font-size: 14px; font-weight: 600; }
+cqa-checklist-editor .cqa-ec-tags { display: grid; grid-template-columns: 110px 70px 28px 8px; gap: 10px; align-items: center; font-size: 12px; color: var(--cqa-muted); }
+.cqa-ec-weight { font-variant-numeric: tabular-nums; }
+.cqa-ec-na { font-size: 11px; }
+.cqa-draft-dot { width: 6px; height: 6px; border-radius: 50%; background: #d29a18; visibility: hidden; }
+.cqa-draft-dot.is-visible { visibility: visible; }
+cqa-checklist-editor .cqa-ec-body { padding: 8px 36px 12px; border: 0; gap: 10px 16px; }
+cqa-checklist-editor .cqa-ec-tools { padding: 0 36px 16px; }
+cqa-checklist-editor .cqa-ec-caret { transition: transform .144s ease-out; }
+cqa-checklist-editor .cqa-ec.is-open .cqa-ec-caret { transition-duration: .18s; }
+cqa-checklist-editor .cqa-assist-result { border: 0; box-shadow: none; background: var(--cqa-surface-2); }
+cqa-checklist-editor .cqa-field.is-changed > .cqa-label::after { content: none; }
+cqa-checklist-editor .cqa-details { padding: 10px 0; }
+.cqa-journal-summary { display: flex; flex-wrap: wrap; gap: 8px 24px; margin: 0 0 20px; font-size: 13px; color: var(--cqa-muted); }
+.cqa-journal-summary > span { white-space: nowrap; }
+.cqa-journal-summary b { margin-left: 4px; color: var(--cqa-text); font-variant-numeric: tabular-nums; }
+.cqa-journal-fold { margin-top: 12px; }
+cqa-journal td .cqa-journal-fold { margin-top: 0; }
+cqa-journal td .cqa-fold-toggle { padding: 3px 0; font-size: 11px; color: var(--cqa-muted); }
+@media (max-width: 1100px) {
+  .cqa-checklist-toolbar .cqa-page-actions { width: 100%; margin-left: 0; }
+}
+@media (max-width: 640px) {
+  cqa-checklist-editor .cqa-ec-head { gap: 6px; grid-template-columns: 12px 24px minmax(0, 1fr); }
+  cqa-checklist-editor .cqa-ec-tags { grid-column: 3; justify-content: start; grid-template-columns: auto auto 28px 8px; }
+  cqa-checklist-editor .cqa-ec-body { padding: 8px 0 12px; }
+  cqa-checklist-editor .cqa-ec-tools { padding-inline: 0; }
+  .cqa-journal-summary { gap: 8px 16px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .cqa-fold-toggle > .cqa-icon, .cqa-fold-toggle[aria-expanded="true"] > .cqa-icon,
+  cqa-checklist-editor .cqa-ec-caret, cqa-checklist-editor .cqa-ec.is-open .cqa-ec-caret { transition: none; }
+}
