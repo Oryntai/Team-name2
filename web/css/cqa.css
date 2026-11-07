@@ -506,6 +506,9 @@ a.cqa-ref:hover { background: var(--cqa-mint-100); border-bottom-style: solid; b
 .cqa-field.is-changed .cqa-input, .cqa-field.is-changed .cqa-textarea, .cqa-field.is-changed .cqa-select, .cqa-field.is-changed .cqa-segctl { border-color: #e0a92a; background: #fffbef; }
 .cqa-field.is-changed > .cqa-label::after { content: "изменено"; margin-left: 6px; font-size: 10.5px; font-weight: 800; color: #8a5a00; background: #fff1c2; border-radius: 5px; padding: 1px 5px; text-transform: none; }
 .cqa-steps { display: flex; flex-direction: column; gap: 6px; }
+.cqa-assist-result { margin-top: 10px; padding: 14px; border: 1px solid var(--cqa-mint-200); border-radius: var(--cqa-radius-md); background: var(--cqa-mint-50); }
+.cqa-assist-result .cqa-errors { margin: 8px 0 12px; }
+.cqa-assist-text { white-space: pre-wrap; overflow-wrap: anywhere; margin: 8px 0 12px; }
 .cqa-step-row { display: grid; grid-template-columns: 86px minmax(0, 1fr) auto; gap: 8px; align-items: center; }
 .cqa-rules { display: flex; flex-direction: column; gap: 8px; }
 .cqa-rule-row { display: grid; grid-template-columns: 26px minmax(0, 1fr) auto; gap: 8px; align-items: start; }

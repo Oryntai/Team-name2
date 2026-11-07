@@ -44,6 +44,7 @@ class ChecklistEditor extends CqaElement {
     this.s = {
       list: [], selId: this.getAttribute('checklist-id'), loaded: null, parent: null, draft: null, open: new Set(),
       validation: null, validating: false, note: '', meta: null, datasets: [], applyDataset: null, applyProvider: null, run: null, justSaved: null,
+      assists: new Map(),
     };
     this.validateSoon = debounce(() => this.validate(), 350);
     this.innerHTML = '<div class="cqa-loading"><span class="cqa-spinner cqa-spinner--lg"></span>Загружаю чек-листы…</div>';
@@ -81,6 +82,7 @@ class ChecklistEditor extends CqaElement {
     if (!this.alive) return;
     Object.assign(this.s, { selId: loaded.id, loaded, parent, draft: clone(loaded.config), validation: { ok: true, errors: [] }, note: '' });
     this.s.open = new Set();
+    this.s.assists = new Map();
     if (parent) for (const c of loaded.config.criteria || []) {
       const p = (parent.config.criteria || []).find((x) => x.id === c.id);
       if (!p || FIELDS.some((f) => !same(normField(c, f), normField(p, f)))) this.s.open.add(c.id);
@@ -197,6 +199,7 @@ class ChecklistEditor extends CqaElement {
           <button type="button" class="cqa-btn cqa-btn--ghost cqa-btn--icon cqa-btn--sm" data-act="del-step" data-i="${i}" data-k="${k}" title="Удалить ступень">${icon('x')}</button></div>`).join('')}
           <div><button type="button" class="cqa-btn cqa-btn--xs" data-act="add-step" data-i="${i}">${icon('plus')}Ступень</button></div></div></div>` : ''}
       <label class="cqa-field cqa-span-6 ${ch('guidance')}"><span class="cqa-label">Пояснение для модели <small>необязательно: трактовки, примеры</small></span><textarea class="cqa-textarea" rows="2" data-path="c.${i}.guidance">${esc(c.guidance || '')}</textarea></label>
+      <div class="cqa-assist cqa-span-6">${this.assistHtml(c, i)}</div>
     </div>`;
     return `<div class="cqa-ec ${open ? 'is-open' : ''} ${diff.isNew ? 'is-new' : diff.fields.length ? 'is-changed' : ''}" data-crit="${esc(c.id)}" style="margin-bottom:8px">
       <div class="cqa-ec-head" data-act="toggle" data-id="${esc(c.id)}">
@@ -210,6 +213,46 @@ class ChecklistEditor extends CqaElement {
           <button type="button" class="cqa-btn cqa-btn--ghost cqa-btn--icon cqa-btn--sm" data-act="del" data-i="${i}" title="Удалить критерий" style="color:var(--cqa-no)">${icon('trash')}</button>
         </span>
       </div>${body}</div>`;
+  }
+
+  assistHtml(c, i) {
+    const a = this.s.assists.get(c.id);
+    const r = a?.result;
+    return `<button type="button" class="cqa-btn cqa-btn--sm" data-act="assist" data-i="${i}" ${a?.loading ? 'disabled' : ''}>${a?.loading ? '<span class="cqa-spinner"></span>Готовлю подсказку…' : 'Подсказка ИИ'}</button>
+      ${a ? `<div class="cqa-assist-result" role="region" aria-label="Подсказка ИИ для критерия ${esc(c.id)}" aria-live="polite" aria-busy="${!!a.loading}">
+        ${a.loading ? '<p class="cqa-muted">Анализирую формулировку и другие критерии…</p>' : ''}
+        ${a.error ? `<div class="cqa-error-box">${esc(a.error)}</div>` : ''}
+        ${r ? `<div class="cqa-label">Предложенное пояснение</div><p class="cqa-assist-text">${esc(r.guidance)}</p>
+          ${r.warnings?.length ? `<div class="cqa-label">Проблемы формулировки</div><ul class="cqa-errors">${r.warnings.map((w) => `<li>${esc(w)}</li>`).join('')}</ul>` : '<p class="cqa-muted">Проблем формулировки не найдено.</p>'}
+          ${r.na_when_suggestion ? `<div class="cqa-label">Предложенное условие N/A</div><p class="cqa-assist-text">${esc(r.na_when_suggestion)}</p>` : ''}
+          <p class="cqa-faint">Проверьте предложение перед вставкой. Изменения сохраняются кнопкой «Сохранить как новую версию».</p>` : ''}
+        <div class="cqa-row">
+          ${r ? `<button type="button" class="cqa-btn cqa-btn--sm" data-act="assist-guidance" data-i="${i}">Вставить в пояснение</button>` : ''}
+          ${r?.na_when_suggestion ? `<button type="button" class="cqa-btn cqa-btn--sm" data-act="assist-na" data-i="${i}" ${!c.na || c.type === 'flag' ? 'disabled title="Сначала разрешите N/A у критерия"' : ''}>Заменить условие N/A</button>` : ''}
+          <button type="button" class="cqa-btn cqa-btn--ghost cqa-btn--sm" data-act="assist-close" data-i="${i}">Закрыть</button>
+        </div>
+      </div>` : ''}`;
+  }
+
+  refreshAssist(c) {
+    const i = this.s.draft.criteria.indexOf(c);
+    const box = this.querySelector(`.cqa-ec[data-crit="${CSS.escape(c.id)}"] .cqa-assist`);
+    if (box && i >= 0) box.innerHTML = this.assistHtml(c, i);
+  }
+
+  async requestAssist(i) {
+    const c = this.s.draft.criteria[i];
+    if (!c || this.s.assists.get(c.id)?.loading) return;
+    const a = { loading: true, result: null, error: null };
+    const pending = this.s.assists;
+    pending.set(c.id, a);
+    this.refreshAssist(c);
+    try {
+      a.result = await this.api.assistChecklist({ config: clone(this.s.draft), criterion_id: c.id });
+    } catch (e) { a.error = e.message; }
+    a.loading = false;
+    // Ответ закрытого блока или другой версии не возвращаем в редактор.
+    if (this.alive && this.s.assists === pending && pending.get(c.id) === a && this.s.draft.criteria.includes(c)) this.refreshAssist(c);
   }
 
   rulesHtml() {
@@ -402,6 +445,16 @@ class ChecklistEditor extends CqaElement {
     const act = actEl.dataset.act;
     const cs = this.s.draft.criteria;
     const i = actEl.dataset.i != null ? +actEl.dataset.i : null;
+    if (act === 'assist') { this.requestAssist(i); return; }
+    if (act === 'assist-close') { this.s.assists.delete(cs[i].id); this.refreshAssist(cs[i]); return; }
+    if (act === 'assist-guidance' || act === 'assist-na') {
+      const r = this.s.assists.get(cs[i].id)?.result;
+      if (!r) return;
+      if (act === 'assist-guidance') cs[i].guidance = r.guidance;
+      else if (cs[i].na && cs[i].type !== 'flag' && r.na_when_suggestion) cs[i].na_when = r.na_when_suggestion;
+      this.changed(true);
+      return;
+    }
     if (act === 'toggle') {
       if (t.closest('.cqa-ec-tools')) return;
       const id = actEl.dataset.id;
@@ -411,13 +464,13 @@ class ChecklistEditor extends CqaElement {
     }
     if (act === 'up' && i > 0) { [cs[i - 1], cs[i]] = [cs[i], cs[i - 1]]; this.changed(true); }
     else if (act === 'down' && i < cs.length - 1) { [cs[i + 1], cs[i]] = [cs[i], cs[i + 1]]; this.changed(true); }
-    else if (act === 'del') { cs.splice(i, 1); this.changed(true); }
+    else if (act === 'del') { this.s.assists.delete(cs[i].id); cs.splice(i, 1); this.changed(true); }
     else if (act === 'add-crit') this.addCriterion();
     else if (act === 'add-step') { (cs[i].steps ||= []).push({ value: 0, text: '' }); this.changed(true); }
     else if (act === 'del-step') { cs[i].steps.splice(+actEl.dataset.k, 1); this.changed(true); }
     else if (act === 'add-rule') { (this.s.draft.rules ||= []).push(''); this.changed(true); setTimeout(() => { const r = this.querySelectorAll('[data-path^="r."]'); r[r.length - 1]?.focus(); }, 0); }
     else if (act === 'del-rule') { this.s.draft.rules.splice(+actEl.dataset.k, 1); this.changed(true); }
-    else if (act === 'reset') { this.s.draft = clone(this.s.loaded.config); this.s.note = ''; this.s.validation = { ok: true, errors: [] }; this.rerenderEditor(); }
+    else if (act === 'reset') { this.s.assists = new Map(); this.s.draft = clone(this.s.loaded.config); this.s.note = ''; this.s.validation = { ok: true, errors: [] }; this.rerenderEditor(); }
     else if (act === 'save') this.save();
     else if (act === 'apply') this.apply();
   }

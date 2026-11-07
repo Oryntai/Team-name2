@@ -68,6 +68,7 @@ function httpClient(base) {
     checklist: (id) => req('GET', `/checklists/${enc(id)}`),
     saveChecklist: (body) => req('POST', '/checklists', body),
     validateChecklist: (config) => req('POST', '/checklists/validate', { config }),
+    assistChecklist: (body) => req('POST', '/checklists/assist', body),
     appeals: (status = 'all') => req('GET', `/appeals${q({ status })}`),
     createAppeal: (body) => req('POST', '/appeals', body),
     decideAppeal: (id, body) => req('POST', `/appeals/${enc(id)}/decision`, body),
