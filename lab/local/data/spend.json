@@ -1,9 +1,10 @@
 {
- "spent": 5.814906,
+ "spent": 10.140362,
  "by": {
   "gen-haiku": 1.32624,
   "label-sonnet": 0.086724,
   "label-sonnet-batch": 4.359242,
-  "eval-haiku-replace07": 0.0427
+  "eval-haiku-replace07": 0.0427,
+  "label-haiku-r4": 4.325456
  }
 }
