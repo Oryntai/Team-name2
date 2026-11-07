@@ -20,9 +20,7 @@ class Card extends CqaElement {
     this.addEventListener('change', (e) => this.onChange(e));
     this.addEventListener('mouseover', (e) => this.onHover(e, true));
     this.addEventListener('mouseout', (e) => this.onHover(e, false));
-    // окно критерия держится у своего значка при прокрутке; Esc закрывает окно и «ход мысли»
-    this.addEventListener('scroll', () => this.placePop(), true);
-    this.listen(window, 'resize', () => this.placePop());
+    // Esc закрывает окно критерия; Enter/пробел на строке критерия — открывает
     this.listen(document, 'keydown', (e) => {
       if (e.key === 'Escape' && this.s.pop) this.closePop();
       const row = e.target.closest?.('.cqa-crit');
@@ -321,15 +319,8 @@ class Card extends CqaElement {
   }
 
   criteriaHtml(crits) {
-    const groups = [];
-    for (const c of crits) {
-      const name = c.section || 'Без секции';
-      let g = groups.find((x) => x.name === name);
-      if (!g) { g = { name, items: [] }; groups.push(g); }
-      g.items.push(c);
-    }
-    return `<p class="cqa-crit-hint">Нажмите на критерий или на значок у реплики — откроется объяснение</p>` + groups.map((g) => `<div class="cqa-sec-head"><span class="cqa-eyebrow">${esc(g.name)}</span></div>
-      ${g.items.map((c) => this.critHtml(c)).join('')}`).join('');
+    return `<p class="cqa-crit-hint">Нажмите на критерий или на значок у реплики — откроется объяснение</p>
+      <div class="cqa-tiles">${crits.map((c) => this.critHtml(c)).join('')}</div>`;
   }
 
   critDef(id) { return this.s.cfg?.criteria?.find((x) => x.id === id) || null; }
@@ -356,19 +347,18 @@ class Card extends CqaElement {
 
   critHtml(c) {
     const v = this.critView(c);
-    const points = v.scored
-      ? `<div class="cqa-crit-points" title="Баллы после перераспределения весов N/A / максимум критерия"><b>${fmtPts(v.pts.val)}</b> <span>/ ${fmtPts(v.pts.max)}</span><small>${esc(v.pts.sub)}</small></div>`
-      : `<div class="cqa-crit-points"><span>${esc(v.pts.main)}</span><small>${esc(v.pts.sub)}</small></div>`;
-    const flags = [v.split ? `<span class="cqa-crit-flag" title="Три независимые оценки модели: ${esc(v.split.join(' · '))}">оценки разошлись</span>` : '',
-      c.appeal?.status === 'open' ? `<span class="cqa-crit-flag cqa-crit-flag--warn">${icon('gavel')}апелляция</span>` : ''].join('');
-    return `<div class="cqa-crit ${this.s.pop?.crit === c.id ? 'is-active' : ''}" role="button" tabindex="0" aria-haspopup="dialog" data-tone="${v.tone}" data-crit="${esc(c.id)}">
-      <div class="cqa-crit-head">
-        <span class="cqa-crit-id">${esc(c.id)}</span>
-        <div class="cqa-crit-title">${esc(c.title)}${flags}</div>
-        ${v.answer}
-        ${points}
-        <span class="cqa-crit-chev">${icon('right')}</span>
-      </div>
+    const def = v.def;
+    const pts = c.type === 'flag' ? '' : v.scored ? fmtPts(v.pts.val) : '—';
+    const ans = `<span class="cqa-answer cqa-answer--sm" data-tone="${v.tone}">${esc(answerLabel(v.crit, v.fa))}</span>`;
+    return `<div class="cqa-crit cqa-tile ${this.s.pop?.crit === c.id ? 'is-active' : ''}" role="button" tabindex="0" aria-haspopup="dialog" data-tone="${v.tone}" data-crit="${esc(c.id)}"
+        title="${esc(`${c.title} — ${answerLabel(v.crit, v.fa)}${v.scored ? ` · ${v.pts.main} (вес ${fmtPts(c.weight)})` : ''}`)}">
+      <span class="cqa-crit-id">${esc(c.id)}</span>
+      <span class="cqa-tile-title">${esc(c.title)}</span>
+      ${v.split ? `<span class="cqa-tile-flag" title="Три независимые оценки модели разошлись: ${esc(v.split.join(' · '))}">≠</span>` : ''}
+      ${c.appeal?.status === 'open' ? `<span class="cqa-tile-flag cqa-tile-flag--warn" title="Апелляция на рассмотрении">${icon('gavel')}</span>` : ''}
+      ${v.changed ? `<span class="cqa-tile-flag cqa-tile-flag--info" title="Изменено проверяющим">${icon('edit')}</span>` : ''}
+      ${ans}
+      <span class="cqa-tile-pts">${pts}</span>
     </div>`;
   }
 
@@ -415,13 +405,6 @@ class Card extends CqaElement {
     }
   }
 
-  popAnchor() {
-    const p = this.s.pop;
-    if (!p) return null;
-    return (p.n != null && this.querySelector(`.cqa-mark[data-mark="${p.crit}"][data-n="${p.n}"]`))
-      || this.querySelector(`.cqa-crit[data-crit="${p.crit}"]`);
-  }
-
   openPop(cid, n = null) {
     this.s.pop = { crit: cid, n };
     this.s.active = cid;
@@ -433,7 +416,6 @@ class Card extends CqaElement {
     const c = (this.s.ev?.criteria || []).find((x) => x.id === cid);
     const first = (c?.original?.evidence || []).map(Number).find((k) => this.querySelector(`.cqa-mark[data-mark="${cid}"][data-n="${k}"]`));
     if (this.s.pop?.crit === cid) { this.closePop(); return; }
-    if (first != null) this.querySelector(`.cqa-transcript [data-n="${first}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
     this.openPop(cid, first ?? null);
   }
 
@@ -441,44 +423,34 @@ class Card extends CqaElement {
     this.s.pop = null;
     this.s.active = null;
     this.s.appealFor = null;
-    this.part('pop')?.classList.remove('is-open');
+    const pop = this.querySelector('.cqa-pop:not(.is-closing)');
+    if (pop) { pop.classList.add('is-closing'); setTimeout(() => pop.remove(), 120); }
     this.querySelectorAll('.cqa-mark.is-on, .cqa-crit.is-active').forEach((el) => el.classList.remove('is-on', 'is-active'));
     this.highlight(null);
   }
 
+  /** Окно критерия — часть ленты: раскрывается прямо под репликой со значком и прокручивается вместе с ней. */
   renderPop() {
-    let pop = this.part('pop');
-    if (!pop) {
-      pop = document.createElement('div');
-      pop.className = 'cqa-pop';
-      pop.dataset.part = 'pop';
-      pop.setAttribute('role', 'dialog');
-      this.appendChild(pop);
-    }
-    if (!this.s.pop) { pop.classList.remove('is-open'); return; }
+    this.querySelectorAll('.cqa-pop').forEach((el) => el.remove());
+    if (!this.s.pop) return;
+    const pop = document.createElement('div');
+    pop.className = 'cqa-pop';
+    pop.dataset.part = 'pop';
+    pop.setAttribute('role', 'dialog');
     pop.innerHTML = this.popHtml(this.s.pop.crit);
+    const msg = this.s.pop.n != null ? this.querySelector(`.cqa-transcript [data-n="${this.s.pop.n}"]`) : null;
+    if (msg) {
+      pop.classList.add(msg.classList.contains('cqa-msg--operator') ? 'cqa-pop--right' : msg.classList.contains('cqa-msg--system') ? 'cqa-pop--center' : 'cqa-pop--left');
+      msg.after(pop);
+    } else {
+      pop.classList.add('cqa-pop--block');
+      const tiles = this.querySelector('.cqa-tiles');
+      if (tiles) tiles.after(pop); else this.part('results')?.appendChild(pop);
+    }
     this.querySelectorAll('.cqa-mark').forEach((el) => el.classList.toggle('is-on', el.dataset.mark === this.s.pop.crit && +el.dataset.n === this.s.pop.n));
     this.querySelectorAll('.cqa-crit').forEach((el) => el.classList.toggle('is-active', el.dataset.crit === this.s.pop.crit));
     this.highlight(this.s.pop.crit);
-    this.placePop();
-    requestAnimationFrame(() => pop.classList.add('is-open'));
-  }
-
-  placePop() {
-    const pop = this.part('pop');
-    const a = this.popAnchor();
-    if (!pop || !a || !this.s.pop) return;
-    const r = a.getBoundingClientRect();
-    const w = Math.min(400, window.innerWidth - 24);
-    pop.style.width = `${w}px`;
-    const h = pop.offsetHeight;
-    const below = r.bottom + 8;
-    const up = h + 8 > window.innerHeight - r.bottom && r.top - h - 8 > 12;
-    const top = up ? r.top - h - 8 : Math.min(below, window.innerHeight - h - 12);
-    const left = Math.min(Math.max(12, r.left - 12), window.innerWidth - w - 12);
-    pop.style.top = `${Math.max(12, top)}px`;
-    pop.style.left = `${left}px`;
-    pop.style.transformOrigin = `${Math.max(16, Math.min(w - 16, r.left + r.width / 2 - left))}px ${up ? '100%' : '0'}`;
+    requestAnimationFrame(() => pop.scrollIntoView({ block: 'nearest', behavior: 'smooth' }));
   }
 
   chipsHtml(nums) {

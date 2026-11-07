@@ -86,11 +86,11 @@ export function answerLabel(crit, a) {
   return a;
 }
 export function evidenceLabel(crit, a) {
-  if (a === 'N/A') return 'Почему N/A';
-  if (crit.type === 'flag') return a === 'Да' ? 'Доказательство' : 'Проверенный участок';
-  if (a === 'Нет') return 'Где ожидалось';
-  if (crit.type === 'scale' && answerTone(crit, a) === 'no') return 'Где ожидалось';
-  return 'Доказательство';
+  if (a === 'N/A') return 'Почему не применимо';
+  if (crit.type === 'flag') return a === 'Да' ? 'Где нарушение' : 'Что проверено';
+  if (a === 'Нет') return 'Где этого не хватило';
+  if (crit.type === 'scale' && answerTone(crit, a) === 'no') return 'Где этого не хватило';
+  return 'На чём основано';
 }
 export function scoreTone(total) {
   if (total == null) return 'none';
