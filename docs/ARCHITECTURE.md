@@ -40,6 +40,7 @@ API организаторов (GET ?group_id=…) ─┐
 | `cqa/db.py` | SQLite: схема и запросы | сервер |
 | `cqa/sources.py` | импорт из API организаторов и из файла | сервер |
 | `cqa/audio.py` | прокси записи звонка (CORS, свежая подписанная ссылка), смещение реплики в записи | сервер |
+| `cqa/callmetrics.py` | справочные метрики звонка по ISO-меткам, без модели и влияния на итог | сервер |
 | `cqa/runner.py` | пакетные прогоны в фоне, прогресс, журнал | сервер |
 | `cqa/api.py`, `cqa/__main__.py` | FastAPI, раздача `web/` | сервер |
 | `web/` | интерфейс: HTML/CSS/JS без сборки, веб-компоненты `cqa-*` | интерфейс |
@@ -158,7 +159,7 @@ appeals(id PK, evaluation_id, criterion_id, comment, created_at, status open|con
 | `POST /api/datasets/import` | `{"group_id", "url"?}` | `{"dataset_id","imported","total"}` |
 | `POST /api/datasets/upload` | multipart `file` (формат API организаторов, список записей или одна запись) | то же |
 | `GET /api/conversations` | `?dataset_id=&language=&channel=` | `[{"id","dataset_id","channel","language","n_replies","duration","latest": {"evaluation_id","checklist_id","checklist_label","status","total","final_total","gross","created_at"} \| null, "appeals": {"open","decided"}}]` |
-| `GET /api/conversations/{id}` | — | `{"id","dataset_id","channel","language","audio_src" \| null, "transcript": [{"n","timestamp","speaker","text","audio_offset" \| null,"pii": [{"start","end","type","label"}]}], "evaluations": [{"evaluation_id","checklist_label","provider","model","created_at","status","total","final_total","gross"}]}` |
+| `GET /api/conversations/{id}` | — | `{"id","dataset_id","channel","language","audio_src" \| null, "call_metrics": object \| null, "transcript": [{"n","timestamp","speaker","text","audio_offset" \| null,"pii": [{"start","end","type","label"}]}], "evaluations": [{"evaluation_id","checklist_label","provider","model","created_at","status","total","final_total","gross"}]}` |
 | `GET /api/evaluations/{id}` | — | см. ниже |
 | `POST /api/runs` | `{"conversation_ids"?: [...], "dataset_id"?, "checklist_id"?, "provider"?, "mode"?: "incremental"\|"full"}` | `{"run_id"}` (оценка идёт в фоне); режим по умолчанию `incremental` |
 | `POST /api/runs/plan` | те же поля, что у запуска | `{"mode","total","without_previous","model_calls","evaluated","reused","criteria": [{"id","title","evaluated","reused","definition_changed","weight_changed"}]}`; без запуска и записи |
@@ -209,6 +210,45 @@ appeals(id PK, evaluation_id, criterion_id, comment, created_at, status open|con
 для которых нужен вызов, без возможных повторов. В ответе прогона `evaluated` и `reused` — суммарные числа
 критериев, `model_calls` включает неудачные попытки. Diff сравнивает исходные ответы и итоги, без апелляций;
 добавление/удаление ответа обозначается null, неуспешные и незавершённые оценки не дают ложных изменений ответов.
+
+## Метрики звонка по меткам времени
+
+`callmetrics.metrics(record)` вычисляется при чтении карточки, без записи в БД и без вызова модели.
+В промпт, ответы модели и формулу итога не входит. Для канала, отличного от `voice call`, пустой
+расшифровки или хотя бы одной не-ISO метки возвращает `null`. ISO с семью знаками дроби поддерживается;
+точность расчёта — микросекунды, выдача секунд — до трёх знаков. Метки без зоны считаются UTC.
+Исходные метки и порядок не меняются; отрицательные интервалы обнуляются с предупреждением `warnings`.
+
+```json
+{"estimated": true, "note": "оценка по меткам времени расшифровки, не по звуку",
+ "duration_s": 70, "hold_s": 25,
+ "holds": [{"start": "ISO", "end": "ISO", "start_n": 4, "end_n": 7, "duration_s": 25, "open": false}],
+ "recording_pause_s": 5,
+ "recording_pauses": [{"start": "ISO", "end": "ISO", "start_n": 5, "end_n": 6, "duration_s": 5, "open": false}],
+ "speech": {"operator": {"seconds": 9, "share": 0.5422, "words_per_minute": 72.4},
+            "client": {"seconds": 7.6, "share": 0.4578, "words_per_minute": 47.4}},
+ "response_pauses": {"count": 3, "median_s": 10, "max_s": 12,
+                     "long": [{"client_n": 2, "operator_n": 3, "duration_s": 12}]},
+ "unknown_events": [{"n": 12, "timestamp": "ISO", "text": "CRM: статус обращения изменён."}], "warnings": []}
+```
+
+Длительность — от первой до последней реплики, включая системные события. Время каждой непустой
+реплики клиента/оператора — минимум из интервала до следующей реплики и `число слов × 0,6 + 2` секунд;
+последняя имеет нулевую длительность. Слова — последовательности букв/цифр, с внутренними дефисами
+и апострофами. Доли (0…1) нормированы на сумму оценочного времени клиента и оператора, без бота,
+системных событий и неотнесённых к речи интервалов. Темп — суммарные слова / суммарное оценочное
+время × 60 только для реплик от трёх слов с положительным временем. Если времени нет, доля/темп — `null`.
+Это оценка по меткам, не акустический замер; интонация не определяется.
+
+Паузы ответа — разница **начал** соседних реплик `client → operator` в исходном массиве, включая
+время речи клиента; бот/системное событие между ними прерывает пару. Порог длинных — строго больше 10 с.
+Номера всех ссылок — позиции в массиве с 1, как в карточке. Медиана/максимум без пар — `null`.
+Удержания и паузы записи учитываются независимо, даже при пересечении. События RU/KZ/EN распознаются
+только у `system`, шаблоны собраны в `_EVENTS`. Повторное начало не открывает второй интервал;
+конец без начала игнорируется. Незакрытый интервал заканчивается последней меткой (`open: true`,
+`end_n: null`, `end` — метка конца разговора). Неизвестные события возвращаются в `unknown_events`.
+Панель использует существующие `data-ref`/`data-seek` и `audio_offset`: секунды записи учитывают
+паузы записи, поэтому не заменяются временем от начала звонка. Демо считает тот же контракт в `web/mock/callmetrics.js`.
 
 ## Интерфейс (`web/`)
 

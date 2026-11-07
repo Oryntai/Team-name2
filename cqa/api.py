@@ -24,7 +24,7 @@ from pydantic import BaseModel
 from starlette.background import BackgroundTask
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from . import assist, audio, judge, pii, sources
+from . import assist, audio, callmetrics, judge, pii, sources
 from .checklist import allowed_answers, normalize, validate
 from .db import DB
 from .judge.providers import env as read_env
@@ -397,6 +397,7 @@ def create_app(db_path: str | os.PathLike | None = None, *, web_dir: str | os.Pa
         return {"id": c["id"], "dataset_id": c["dataset_id"], "channel": c["channel"], "language": c["language"],
                 "duration": c["duration"], "audio_src": f"/api/audio/{cid}" if has_audio else None,
                 "audio_recorded_s": round(audio.recorded_seconds(tr), 1) if has_audio else None,
+                "call_metrics": callmetrics.metrics(c),
                 "transcript": items, "evaluations": [summary(e) for e in db.evaluations_for(cid)]}
 
     @app.get("/api/evaluations/{ev_id}")
