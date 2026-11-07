@@ -230,3 +230,87 @@ def test_cli_prod_end_to_end_from_file(tmp_path, monkeypatch):
                     "--db", str(tmp_path / "cqa.db"), "--team", "Команда", "--fresh"]) == 0
     assert len(db.list_runs()) == n + 1
     assert all(rs.pick(db, c, rs.official_config(), True, before)[0] for c in ("ctrl-1", "ctrl-2"))
+
+
+def _ctrl_file(tmp_path, records, **extra):
+    src = tmp_path / "ctrl.json"
+    src.write_text(json.dumps({"error": None, "isSuccess": True, "data": {
+        "dataset_group_id": "CTRL-X", "total_records": len(records), "records": records}, **extra},
+        ensure_ascii=False), encoding="utf-8")
+    return src
+
+
+def _rec(cid, transcript=None, **fields):
+    return {"conversation_id": cid, "channel": "chat", "language": "RU",
+            "transcript": TR if transcript is None else transcript, "audio_url": None, **fields}
+
+
+def _prod(tmp_path, src, expect, *more):
+    out = tmp_path / "results" / "prod" / "results.json"
+    code = rs.main(["prod", "--file", str(src), "--provider", "fake", "--expect", str(expect), "--out", str(out),
+                    "--db", str(tmp_path / "cqa.db"), "--team", "Команда", *more])
+    return code, out
+
+
+def test_cli_one_broken_record_does_not_cancel_the_other_nine(tmp_path, monkeypatch, capsys):
+    """Приложение: «ровно 10 записей, включая ошибки». Нечитаемый диалог — status error с причиной, остальные оценены."""
+    monkeypatch.setenv("CQA_ALLOW_FAKE", "1")
+    recs = [_rec(f"ctrl-{i:02d}") for i in range(1, 11)]
+    recs[4] = _rec("ctrl-05", transcript=[])
+    recs[7] = _rec("ctrl-08", transcript=[{"text": "без роли", "timestamp": "00:01"}])
+    code, out = _prod(tmp_path, _ctrl_file(tmp_path, recs), 10)
+    doc = rs.load_strict(out)
+    assert code == 1  # есть ошибки — но файл записан и проходит проверку формата
+    assert [r["conversation_id"] for r in doc["results"]] == [f"ctrl-{i:02d}" for i in range(1, 11)]
+    bad = {r["conversation_id"]: r for r in doc["results"] if r["status"] != "ok"}
+    assert set(bad) == {"ctrl-05", "ctrl-08"}
+    assert all(r["criteria"] == [] and r["score"] is None and r["error"] for r in bad.values())
+    assert rs.validate(doc, expected_ids=[r["conversation_id"] for r in recs], expect_count=10) == []
+    assert "Сдать: git add" in capsys.readouterr().out
+
+
+def test_cli_turn_without_text_or_timestamp_is_still_evaluated(tmp_path, monkeypatch):
+    monkeypatch.setenv("CQA_ALLOW_FAKE", "1")
+    tr = [dict(t) for t in TR]
+    tr[0].pop("text")
+    tr[1]["timestamp"] = None
+    tr[1]["text"] = None
+    code, out = _prod(tmp_path, _ctrl_file(tmp_path, [_rec("ctrl-1", tr), _rec("ctrl-2", channel=["chat"],
+                                                                              language={"x": 1})]), 2)
+    doc = rs.load_strict(out)
+    assert code == 0 and [r["status"] for r in doc["results"]] == ["ok", "ok"]
+    saved = DB(tmp_path / "cqa.db").conversation("ctrl-1")["transcript"]
+    assert len(saved) == len(TR) and saved[0]["text"] == "" and saved[1]["text"] == "" and saved[1]["timestamp"] == ""
+
+
+def test_cli_reimported_control_is_evaluated_fresh_not_reused(tmp_path, monkeypatch):
+    """Тот же id с другим текстом: оценка прошлого запуска в файл не попадает."""
+    monkeypatch.setenv("CQA_ALLOW_FAKE", "1")
+    src = _ctrl_file(tmp_path, [_rec("ctrl-1")])
+    assert _prod(tmp_path, src, 1)[0] == 0
+    db = DB(tmp_path / "cqa.db")
+    first = db.one("SELECT MAX(id) AS m FROM evaluations")["m"]
+    assert _prod(tmp_path, src, 1)[0] == 0
+    assert rs.pick(db, "ctrl-1", rs.official_config(), True, first)[0] is not None  # новая оценка этого запуска
+
+
+def test_cli_api_error_flag_and_stale_file_warning(tmp_path, monkeypatch, capsys):
+    monkeypatch.setenv("CQA_ALLOW_FAKE", "1")
+    code, out = _prod(tmp_path, _ctrl_file(tmp_path, [_rec("ctrl-1")]), 1)
+    assert code == 0 and out.exists()
+    bad = tmp_path / "bad.json"
+    bad.write_text(json.dumps({"isSuccess": "false", "message": "group_id не найден", "data": None}), encoding="utf-8")
+    code, _ = _prod(tmp_path, bad, 1)
+    printed = capsys.readouterr().out
+    assert code == 1 and "group_id не найден" in printed and "ПРОШЛОГО запуска" in printed
+
+
+def test_cli_record_without_id_is_skipped_loudly_others_written(tmp_path, monkeypatch, capsys):
+    monkeypatch.setenv("CQA_ALLOW_FAKE", "1")
+    recs = [_rec("ctrl-1"), None, {"channel": "chat", "transcript": TR}, _rec("ctrl-4")]
+    code, out = _prod(tmp_path, _ctrl_file(tmp_path, recs), 4)
+    doc = rs.load_strict(out)
+    printed = capsys.readouterr().out
+    assert code == 1 and "Записей 2, нужно ровно 4" in printed and "Запись пропущена" in printed
+    assert [r["conversation_id"] for r in doc["results"]] == ["ctrl-1", "ctrl-4"]
+    assert all(r["status"] == "ok" for r in doc["results"])

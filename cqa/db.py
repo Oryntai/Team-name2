@@ -82,6 +82,14 @@ CREATE INDEX IF NOT EXISTS doubt_questions_key ON doubt_questions(key, id);
 """
 
 
+def _safe_duration(transcript: list) -> str | None:
+    """Длительность для списка диалогов; странные метки времени не должны ронять импорт всего набора."""
+    try:
+        return audio.duration(transcript)
+    except (TypeError, ValueError, OverflowError, AttributeError):
+        return None
+
+
 def now() -> str:
     return dt.datetime.now().isoformat(timespec="seconds")
 
@@ -192,7 +200,7 @@ class DB:
                           "transcript=excluded.transcript, audio_url=excluded.audio_url, imported_at=excluded.imported_at, "
                           "pos=excluded.pos, n_replies=excluded.n_replies, duration=excluded.duration",
                           (r["conversation_id"], dataset_id, r.get("channel"), r.get("language"),
-                           serialized, r.get("audio_url"), ts, pos, len(tr), audio.duration(tr)))
+                           serialized, r.get("audio_url"), ts, pos, len(tr), _safe_duration(tr)))
         return len(records)
 
     def list_datasets(self) -> list[dict]:

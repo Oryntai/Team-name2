@@ -62,22 +62,33 @@ def _record(r, i: int) -> dict:
     for j, t in enumerate(tr, 1):
         if not isinstance(t, dict):
             raise SourceError(f"{where}, реплика {j}: ожидался объект.")
-        missing = [k for k in ("timestamp", "speaker", "text") if k not in t]
-        if missing:
-            raise SourceError(f"{where}, реплика {j}: нет полей {', '.join(missing)}.")
-        out_tr.append({"timestamp": t["timestamp"], "speaker": t["speaker"],
-                       "text": t["text"] if isinstance(t["text"], str) else str(t["text"])})
+        if not isinstance(t.get("speaker"), str) or not t["speaker"].strip():
+            raise SourceError(f"{where}, реплика {j}: не указано, кто говорит (speaker).")
+        # Без текста или метки времени реплика остаётся на своём месте (номера реплик — по исходному массиву):
+        # диалог можно оценить, а не терять целиком.
+        text, ts = t.get("text"), t.get("timestamp")
+        out_tr.append({"timestamp": "" if ts is None else ts, "speaker": t["speaker"],
+                       "text": "" if text is None else text if isinstance(text, str) else str(text)})
     audio_url = r.get("audio_url")
-    return {"conversation_id": cid, "channel": r.get("channel") or "", "language": r.get("language") or "",
+    channel, language = r.get("channel"), r.get("language")
+    return {"conversation_id": cid, "channel": channel if isinstance(channel, str) else "",
+            "language": language if isinstance(language, str) else "",
             "transcript": out_tr, "audio_url": audio_url if isinstance(audio_url, str) and audio_url.strip() else None}
 
 
-def parse_payload(obj) -> tuple[str | None, int | None, list[dict]]:
-    """Формат API организаторов, {"records": [...]}, список записей или одна запись → (group_id, total, records)."""
+def parse_payload(obj, *, tolerate_records: bool = False) -> tuple[str | None, int | None, list[dict]]:
+    """Формат API организаторов, {"records": [...]}, список записей или одна запись → (group_id, total, records).
+
+    tolerate_records (выгрузка результатов): запись, которую нельзя прочитать, не отменяет весь набор — она приходит
+    с полем source_error и попадает в results.json со status error и причиной (остальные оцениваются).
+    """
     group_id, total = None, None
     if isinstance(obj, dict) and ("isSuccess" in obj or "data" in obj):
-        if obj.get("isSuccess") is False:
-            raise SourceError(f"API организаторов вернуло ошибку: {str(obj.get('error') or 'без текста')[:300]}")
+        flag = obj.get("isSuccess")
+        if flag is False or (isinstance(flag, (int, str)) and not isinstance(flag, bool)
+                             and str(flag).strip().lower() in ("0", "false", "no")):
+            reason = obj.get("error") or obj.get("message") or "без текста"
+            raise SourceError(f"API организаторов вернуло ошибку: {str(reason)[:300]}")
         obj = obj.get("data")
         if not isinstance(obj, dict):
             raise SourceError("В ответе нет поля data.")
@@ -91,7 +102,24 @@ def parse_payload(obj) -> tuple[str | None, int | None, list[dict]]:
         raise SourceError("Не похоже на набор диалогов: нужен формат API организаторов, список записей или одна запись.")
     if not obj:
         raise SourceError("В наборе нет ни одного диалога.")
-    records = [_record(r, i) for i, r in enumerate(obj, 1)]
+    records = []
+    for i, r in enumerate(obj, 1):
+        try:
+            records.append(_record(r, i))
+        except SourceError as e:
+            cid = r.get("conversation_id") if isinstance(r, dict) else None
+            if not tolerate_records:
+                raise
+            if isinstance(cid, int) and not isinstance(cid, bool):
+                cid = str(cid)
+            if not isinstance(cid, str) or not cid.strip():
+                # Без id запись в results.json не сопоставить; остальные всё равно оцениваем — лучше, чем ничего.
+                print(f"ВНИМАНИЕ: {e} Запись пропущена — в файле будет меньше записей, чем в наборе.")
+                continue
+            records.append({"conversation_id": cid.strip(), "channel": "", "language": "", "transcript": [],
+                            "audio_url": None, "source_error": str(e)})
+    if not records:
+        raise SourceError("В наборе нет ни одного диалога с conversation_id.")
     seen: set[str] = set()
     for r in records:
         if r["conversation_id"] in seen:
@@ -101,15 +129,16 @@ def parse_payload(obj) -> tuple[str | None, int | None, list[dict]]:
             int(total) if isinstance(total, int) else len(records), records)
 
 
-def parse_bytes(data: bytes) -> tuple[str | None, int | None, list[dict]]:
+def parse_bytes(data: bytes, *, tolerate_records: bool = False) -> tuple[str | None, int | None, list[dict]]:
     try:
         obj = json.loads(data.decode("utf-8-sig"))
     except (UnicodeDecodeError, json.JSONDecodeError) as e:
         raise SourceError(f"Файл не читается как JSON (UTF-8): {e}") from e
-    return parse_payload(obj)
+    return parse_payload(obj, tolerate_records=tolerate_records)
 
 
-async def fetch(url: str, group_id: str, timeout: float = 120) -> tuple[str | None, int | None, list[dict]]:
+async def fetch(url: str, group_id: str, timeout: float = 120, *,
+                tolerate_records: bool = False) -> tuple[str | None, int | None, list[dict]]:
     """GET к API организаторов. Ошибки — без адреса с подписью."""
     if not url or not url.startswith(("http://", "https://")):
         raise SourceError("Не задан адрес API организаторов: вставьте ссылку GET из задания в настройках.")
@@ -131,5 +160,5 @@ async def fetch(url: str, group_id: str, timeout: float = 120) -> tuple[str | No
         obj = r.json()
     except ValueError as e:
         raise SourceError("API организаторов вернуло не JSON.") from e
-    gid, total, records = parse_payload(obj)
+    gid, total, records = parse_payload(obj, tolerate_records=tolerate_records)
     return gid or group_id, total, records

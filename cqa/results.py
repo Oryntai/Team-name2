@@ -307,7 +307,24 @@ def build(db: DB, ids: list[str], config: dict, team: str, provider: str = "haik
 
 # --- командная строка ---
 
+def _save_source(db: DB, args, ds: str, source: str, records: list[dict], total) -> list[str]:
+    """Сохраняет набор контроля; нечитаемые записи — в args.source_errors (в файл: status error с причиной)."""
+    args.source_errors = {r["conversation_id"]: r["source_error"] for r in records if "source_error" in r}
+    db.save_dataset(ds, source, [r for r in records if "source_error" not in r], total)
+    if isinstance(total, int) and total != len(records):
+        print(f"ВНИМАНИЕ: в ответе total_records = {total}, а диалогов {len(records)} — проверьте полноту набора.")
+    roles = collections.Counter(t["speaker"] for r in records for t in r["transcript"]
+                                if t["speaker"] not in sources.ROLES)
+    if roles:
+        print("ВНИМАНИЕ: незнакомые роли в репликах (ждём client/operator/bot/system): "
+              + ", ".join(f"{k} ×{v}" for k, v in roles.most_common()))
+    for cid, reason in args.source_errors.items():
+        print(f"ВНИМАНИЕ: диалог {cid} не читается — в файл пойдёт со status error: {reason}")
+    return [r["conversation_id"] for r in records]
+
+
 async def _dataset_ids(db: DB, args) -> list[str]:
+    args.source_errors = {}
     if args.cmd == "dev":
         ds = args.dataset or "DEV"
         if not db.conversation_ids(ds):
@@ -316,16 +333,14 @@ async def _dataset_ids(db: DB, args) -> list[str]:
             db.save_dataset(ds, "file:data/dev.json", records, total)
         ids = db.conversation_ids(ds)
     elif args.file:
-        gid, total, records = sources.parse_bytes(pathlib.Path(args.file).read_bytes())
+        gid, total, records = sources.parse_bytes(pathlib.Path(args.file).read_bytes(), tolerate_records=True)
         ds = gid or args.group_id or "PROD"
-        db.save_dataset(ds, f"file:{pathlib.Path(args.file).name}", records, total)
-        ids = [r["conversation_id"] for r in records]
+        ids = _save_source(db, args, ds, f"file:{pathlib.Path(args.file).name}", records, total)
     elif args.group_id:
         url = args.url or os.environ.get("CQA_DATASET_URL") or db.get_setting("dataset_url")
-        gid, total, records = await sources.fetch(url, args.group_id)
+        gid, total, records = await sources.fetch(url, args.group_id, tolerate_records=True)
         ds = gid or args.group_id
-        db.save_dataset(ds, f"api:{args.group_id}", records, total)
-        ids = [r["conversation_id"] for r in records]
+        ids = _save_source(db, args, ds, f"api:{args.group_id}", records, total)
     elif args.dataset:
         ds, ids = args.dataset, db.conversation_ids(args.dataset)
     else:
@@ -371,6 +386,15 @@ def _report(out: pathlib.Path, doc: dict, errs: list[str]) -> None:
         print("Проверка по правилам приложения пройдена.")
     if not errs and not bad:
         print(f"Дальше: git add {rel} && git commit -m 'Результаты {rel.parent.name}' && git push")
+    elif not errs:
+        print("Есть записи со status error — по приложению это допустимо (причина в поле error). Сбой модели — "
+              "повторите ту же команду (набор оценится заново, ~30 с); диалог не прочитан из входа — так и сдавать.")
+        print(f"Сдать: git add {rel} && git commit -m 'Результаты {rel.parent.name}' && git push")
+
+
+def _warn_stale(out) -> None:
+    if out and pathlib.Path(out).exists():
+        print(f"ВНИМАНИЕ: {out} — файл ПРОШЛОГО запуска, этот запуск его не обновил. Не пушить его как результат.")
 
 
 async def _run_set(args) -> int:
@@ -394,24 +418,36 @@ async def _run_set(args) -> int:
         ids = await _dataset_ids(db, args)
     except (sources.SourceError, OSError) as e:
         print(f"Набор не загружен: {e}")
+        _warn_stale(args.out)
         return 1
     if not ids:
         print("Набор пуст.")
         return 1
     checklist_id = official_checklist_id(db, config)
-    # --fresh: в файл идут только оценки этого запуска (старые и новые не смешиваем)
-    min_id = db.one("SELECT COALESCE(MAX(id), 0) AS m FROM evaluations")["m"] if args.fresh else 0
+    # --fresh: в файл идут только оценки этого запуска (старые и новые не смешиваем). Контроль, загруженный из файла
+    # или по API, оценивается всегда заново: под тем же id в базе мог лежать другой текст (отпечатки чек-листа
+    # содержимое диалога не покрывают).
+    fresh = args.fresh or (args.cmd == "prod" and bool(getattr(args, "file", None) or getattr(args, "group_id", None))
+                           and not args.no_evaluate)
+    min_id = db.one("SELECT COALESCE(MAX(id), 0) AS m FROM evaluations")["m"] if fresh else 0
     if not args.no_evaluate:
         for _ in range(2):  # второй заход — для диалогов, не прошедших и после повторов внутри прогона
-            todo = [cid for cid in ids if pick(db, cid, config, allow_fake, min_id, args.provider)[0] is None]
+            todo = [cid for cid in ids if cid not in args.source_errors
+                    and pick(db, cid, config, allow_fake, min_id, args.provider)[0] is None]
             if not todo:
                 break
             await _evaluate(db, todo, checklist_id, args.provider)
     doc = build(db, ids, config, args.team, args.provider, allow_fake, min_id)
+    for i, cid in enumerate(ids):
+        if cid in args.source_errors:  # не подменяем нулём и не прячем: причина — в поле error
+            doc["results"][i] = {"conversation_id": cid, "status": "error", "criteria": [], "score": None,
+                                 "error": f"Диалог не прочитан: {args.source_errors[cid]}"}
     errs = validate(doc, expected_ids=ids, expect_count=args.expect, n_turns=turn_counts(db, ids))
     out = pathlib.Path(args.out)
     out.parent.mkdir(parents=True, exist_ok=True)
-    out.write_text(dump(doc), encoding="utf-8")
+    pending = out.with_name(out.name + ".tmp")  # файл заменяется целиком: недописанного results.json не бывает
+    pending.write_text(dump(doc), encoding="utf-8")
+    pending.replace(out)
     _report(out.resolve(), doc, errs)
     return 1 if errs or any(r["status"] != "ok" for r in doc["results"]) else 0
 
