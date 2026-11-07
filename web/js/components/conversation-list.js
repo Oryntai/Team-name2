@@ -140,9 +140,10 @@ class ConversationList extends CqaElement {
         <div class="cqa-search">${icon('search')}<input class="cqa-input cqa-input--sm" data-f="q" placeholder="Поиск по ID" value="${esc(this.s.q)}"></div>
       </div>
       <div class="cqa-toolbar-group cqa-toolbar-run">
-        <select class="cqa-select cqa-select--sm" data-f="checklist" aria-label="Чек-лист" title="Версия чек-листа" ${busy ? 'disabled' : ''}>
-          ${[...checklists].sort((a, b) => b.id - a.id).map((c) => `<option value="${c.id}" ${c.id === this.s.checklistId ? 'selected' : ''}>${esc(checklistLabel(c))}</option>`).join('') || '<option value="">нет чек-листов</option>'}
-        </select>
+        ${checklists.length > 1 ? `<select class="cqa-select cqa-select--sm" data-f="checklist" aria-label="Чек-лист" title="Версия чек-листа" ${busy ? 'disabled' : ''}>
+          ${[...checklists].sort((a, b) => b.id - a.id).map((c) => `<option value="${c.id}" ${c.id === this.s.checklistId ? 'selected' : ''}>${esc(checklistLabel(c))}</option>`).join('')}
+        </select>` : `<a class="cqa-inline-value" href="#/checklist" title="Открыть чек-лист">${checklists.length ? esc(checklistLabel(checklists[0])) : 'нет'}</a>`}
+        <span class="cqa-inline-label">Модель</span>
         <select class="cqa-select cqa-select--sm" data-f="provider" aria-label="Модель" title="Модель" ${busy ? 'disabled' : ''}>
           ${providers.map((p) => `<option value="${esc(p.id)}" ${p.id === this.s.provider ? 'selected' : ''} ${p.available === false ? 'disabled' : ''}>${esc(p.label || p.id)}${p.available === false ? ' — не настроена' : ''}</option>`).join('')}
         </select>

@@ -598,3 +598,6 @@ cqa-card { container-type: inline-size; container-name: cqa-card; }
 .cqa-sub-alert { color: var(--cqa-red-700, #b42318); font-weight: 600; }
 .cqa-toolbar .cqa-select { width: auto; max-width: 260px; }
 .cqa-btn[hidden] { display: none; }
+.cqa-inline-label { font-size: 12.5px; color: var(--cqa-muted); }
+.cqa-inline-value { font-size: 13px; font-weight: 600; color: var(--cqa-green-800); text-decoration: none; margin-right: 6px; }
+.cqa-inline-value:hover { text-decoration: underline; }
