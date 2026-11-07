@@ -36,6 +36,7 @@ API организаторов (GET ?group_id=…) ─┐
 | `cqa/pii.py` | маскировка личных данных перед моделью | ядро |
 | `cqa/judge/` | промпт и JSON-схема из чек-листа, провайдеры моделей, `evaluate()` | ядро |
 | `cqa/checklists/default.json` | начальная конфигурация (PDF организаторов) | ядро |
+| `cqa/insights.py` | разговорный разбор и советы: отдельный вызов, строгая схема, фоновая очередь | сервер |
 | `cqa/assist.py` | черновик пояснения и замечания к критерию: один вызов существующего провайдера | сервер |
 | `cqa/sandbox.py` | проба черновика на трёх диалогах параллельно, без записи в базу | сервер |
 | `cqa/db.py` | SQLite: схема и запросы | сервер |
@@ -157,6 +158,7 @@ evaluations(id PK, run_id, conversation_id, checklist_id, created_at, provider, 
             latency_s, input_tokens, output_tokens, cost_usd, answers JSON, pii_masked JSON, raw, total, gross,
             mode, evaluated JSON, reused JSON, model_calls)
 run_items(run_id, pos, conversation_id, status, evaluation_id, error, previous_evaluation_id)
+insights(id PK, conversation_id, evaluation_id, created_at, provider, model, cost_usd, input_tokens, output_tokens, data JSON)
 appeals(id PK, evaluation_id, criterion_id, comment, created_at, status open|confirmed|changed,
         new_answer, reason, decided_at)
 ```
@@ -182,6 +184,9 @@ appeals(id PK, evaluation_id, criterion_id, comment, created_at, status open|con
 | `GET /api/conversations/{id}` | — | `{"id","dataset_id","channel","language","audio_src" \| null, "call_metrics": object \| null, "transcript": [{"n","timestamp","speaker","text","audio_offset" \| null,"pii": [{"start","end","type","label"}]}], "evaluations": [{"evaluation_id","checklist_label","provider","model","created_at","status","total","final_total","gross"}]}` |
 | `GET /api/evaluations/{id}` | — | см. ниже |
 | `POST /api/runs` | `{"conversation_ids"?: [...], "dataset_id"?, "checklist_id"?, "provider"?, "mode"?: "incremental"\|"full"}` | `{"run_id"}` (оценка идёт в фоне); режим по умолчанию `incremental` |
+| `POST /api/insights/run` | `{"conversation_ids"?: [...], "dataset_id"?: "DEV"}` | `202 {"insight_ids": [...], "conversation_ids": [...]}`; разбор в фоне |
+| `GET /api/insights/{conversation_id}` | — | последний разбор с метаданными или `null`; неизвестный диалог — `404` |
+| `GET /api/insights` | `?dataset_id=` | последние разборы диалогов, включая ожидающие и ошибки |
 | `POST /api/runs/plan` | те же поля, что у запуска | `{"mode","total","without_previous","model_calls","evaluated","reused","criteria": [{"id","title","evaluated","reused","definition_changed","weight_changed"}]}`; без запуска и записи |
 | `GET /api/runs/{id}` | — | `{"id","status","mode","checklist_id","checklist_label","provider","model","total","done","failed","cost_usd","model_calls","evaluated","reused","created_at","finished_at","items": [{"conversation_id","status","evaluation_id","total","gross","error"}]}` |
 | `GET /api/runs/{id}/diff` | — | `{"run_id","items": [{"conversation_id","status","error","previous": {"id","total","gross","status"}\|null,"current": {"id","total","gross","status"}\|null,"changes": [{"id","before","after"}]}],"criteria": [{"id","title","changed"}]}` |
@@ -291,3 +296,40 @@ HTML/CSS/JS без сборки и без внешних CDN. Каждый эк�
 можно было вставить веб-ресурсом в форму Dynamics 365: `<cqa-conversation-list>`, `<cqa-card conversation-id="…">`,
 `<cqa-appeals>`, `<cqa-checklist-editor>`, `<cqa-journal>`; `<cqa-app>` собирает их в приложение (маршруты по `#`).
 Роль («Оператор» / «Проверяющий») переключается в шапке, без входа: оператор подаёт апелляцию, проверяющий решает.
+
+## Разбор диалога
+
+`cqa/insights.py` делает один отдельный вызов провайдера из настроек (по умолчанию Haiku), без голосования
+и автоматических повторов. До запуска всей пачки проверяет наличие диалогов и успешных оценок.
+Явный пустой список — `422`; дубликаты id удаляются с сохранением порядка. Если заданы и список,
+и набор, все id должны принадлежать этому набору. Без успешной оценки — `422`, без доступной модели — `422`.
+Скрытый `fake` разрешён только при `allow_fake` / `CQA_ALLOW_FAKE=1`; тесты подставляют провайдер,
+который поддерживает схему разбора, не меняя заглушку судьи.
+
+В момент запуска фиксируются транскрипт, последняя **успешная** оценка любой модели и её чек-лист.
+В модель уходят исходные ответы и объяснения судьи (без решений по апелляциям), а транскрипт и объяснения
+проходят через существующую маскировку ПДн. Нумерация с 1, включая бота и события, как у судьи.
+Оценки, прогоны оценки и results.json разбор не изменяет.
+
+Одна запись `insights` соответствует одному запросу разбора: сначала `data={"status":"pending"}`,
+перед вызовом `running`, после — `ok` или `error`. Общий семафор ограничивает все пачки восемью
+одновременными вызовами. Повторный запуск уже ожидающего/выполняемого диалога возвращает тот же id;
+повтор после завершения создаёт новую запись. При остановке/перезапуске незавершённые разборы получают
+ошибку. Состояние читается через GET; отдельного run_id для аналитики нет.
+
+Успешный `data` содержит `status`, `summary`, `topic`, `reason`, `sentiment: {start,end}`,
+`flags: [{code, turns: [1,2], reason}]`, `coaching: [{criterion_id, tip, turn, rewrite}]`.
+Коды флагов: `complaint`, `escalation_request`, `churn_risk`, `follow_up_promised`, `unresolved`, `bot_failed`.
+Рекомендации обязательны для «Нет» у bool, ступени ниже максимума у scale и «Да» у flag;
+N/A и выполненные критерии исключены. Без реплик оператора рекомендации пусты.
+Схема использует поддерживаемые Claude типы, обязательные поля и enum; ограничения длины,
+полнота рекомендаций и дубликаты проверяются сервером через Pydantic и ссылки на исходные реплики.
+Схема и серверная проверка отклоняют неизвестные поля/коды и неверные номера;
+смысл, тему, настроение и текст рекомендаций определяет только модель.
+
+Стоимость и токены сохраняются до проверки ответа, включая некорректный JSON. Ошибка провайдера без
+возвращённого usage сохраняется с нулевой известной стоимостью, как у оценки. Ошибка в `data.error`
+не содержит текст транспорта, ключи или сырой ответ. В карточке видны фактическая стоимость и модель;
+токены и причины флагов — по клику на резюме. Рекомендации показываются только у той оценки,
+на которую ссылается разбор. При новой оценке доступно «Обновить». Фильтр флагов и тема в списке
+появляются при наличии успешных разборов; отдельной кнопки пакетного запуска в списке нет.

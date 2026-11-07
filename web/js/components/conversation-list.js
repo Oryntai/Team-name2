@@ -1,5 +1,6 @@
 // <cqa-conversation-list> — список диалогов: импорт набора, фильтры, запуск оценки с прогрессом.
 import { CqaElement } from '../base.js';
+import { INSIGHT_FLAGS } from '../insights.js';
 import {
   esc, icon, fmtScore, fmtDateTime, fmtMoney, fmtClock, fmtDuration, fmtInt, scoreTone, isCall, CHANNEL_LABEL,
   toast, pollRun, isRunFinished, store, providerLabel, checklistLabel, navigate, emit, secondsBetween, plural, PROVIDER_DESC } from '../util.js';
@@ -14,7 +15,7 @@ class ConversationList extends CqaElement {
   init() {
     this.s = {
       meta: null, datasets: [], checklists: [], rows: [],
-      dataset: this.getAttribute('dataset') || null, lang: 'all', channel: 'all', q: '',
+      insights: new Map(), flag: 'all', dataset: this.getAttribute('dataset') || null, lang: 'all', channel: 'all', q: '',
       sort: { key: 'id', dir: 1 }, selected: new Set(), checklistId: null, provider: null,
       run: null, runItems: new Map(),
     };
@@ -48,7 +49,10 @@ class ConversationList extends CqaElement {
   }
 
   async loadRows() {
-    const rows = await this.api.conversations(this.s.dataset && this.s.dataset !== 'all' ? { dataset_id: this.s.dataset } : {});
+    const params = this.s.dataset && this.s.dataset !== 'all' ? { dataset_id: this.s.dataset } : {};
+    const [rows, insights] = await Promise.all([this.api.conversations(params), this.api.mock ? [] : this.api.insights(params)]);
+    this.s.insights = new Map(insights.filter((i) => i.data.status === 'ok').map((i) => [i.conversation_id, i.data]));
+    if (!this.s.insights.size) this.s.flag = 'all';
     this.s.rows = rows || [];
     const ids = new Set(this.s.rows.map((r) => r.id));
     for (const id of [...this.s.selected]) if (!ids.has(id)) this.s.selected.delete(id);
@@ -60,6 +64,7 @@ class ConversationList extends CqaElement {
     const qq = q.trim().toLowerCase();
     const rows = this.s.rows.filter((r) => (lang === 'all' || (r.language || '').toUpperCase() === lang)
       && (channel === 'all' || (channel === 'call') === isCall(r.channel))
+      && (this.s.flag === 'all' || this.s.insights.get(r.id)?.flags.some((f) => f.code === this.s.flag))
       && (!qq || r.id.toLowerCase().includes(qq)));
     const val = (r) => (sort.key === 'total' ? (finalTotal(r.latest) ?? -1) : sort.key === 'language' ? (r.language || '') : r.id);
     return rows.sort((a, b) => {
@@ -136,6 +141,7 @@ class ConversationList extends CqaElement {
           </select>` : ''}
         ${seg('lang', [['all', 'Все языки'], ...[...langs, ...extra].map((l) => [l, l])], this.s.lang)}
         ${seg('channel', [['all', 'Все'], ['chat', 'Чаты'], ['call', 'Звонки']], this.s.channel)}
+        ${this.s.insights.size ? `<select class="cqa-select cqa-select--sm" data-f="flag" aria-label="Флаги разбора"><option value="all">Все флаги</option>${Object.entries(INSIGHT_FLAGS).map(([code, label]) => `<option value="${code}" ${this.s.flag === code ? 'selected' : ''}>${esc(label)}</option>`).join('')}</select>` : ''}
         <div class="cqa-search">${icon('search')}<input class="cqa-input cqa-input--sm" data-f="q" placeholder="Поиск по ID" value="${esc(this.s.q)}"></div>
       </div>
       <div class="cqa-toolbar-group cqa-toolbar-run">
@@ -209,7 +215,7 @@ class ConversationList extends CqaElement {
     const meta = [r.n_replies != null ? `${fmtInt(r.n_replies)} ${plural(r.n_replies, 'реплика', 'реплики', 'реплик')}` : '', fmtDuration(r.duration)].filter(Boolean).join(' · ');
     return `<tr class="is-clickable ${sel ? 'is-selected' : ''} ${running ? 'is-running' : ''}" data-id="${esc(r.id)}">
       <td class="cqa-col-check"><input type="checkbox" class="cqa-check" data-sel="${esc(r.id)}" ${sel ? 'checked' : ''} aria-label="Выбрать ${esc(r.id)}"></td>
-      <td><div class="cqa-cell-id">${esc(r.id)}</div>${meta ? `<div class="cqa-cell-sub">${esc(meta)}</div>` : ''}</td>
+      <td><div class="cqa-cell-id">${esc(r.id)}</div>${meta ? `<div class="cqa-cell-sub">${esc(meta)}</div>` : ''}${this.s.insights.has(r.id) ? `<div class="cqa-cell-sub cqa-insight-topic">${esc(this.s.insights.get(r.id).topic)}</div>` : ''}</td>
       <td><span class="cqa-channel">${icon(isCall(r.channel) ? 'phone' : 'chat')}${CHANNEL_LABEL(r.channel)}</span></td>
       <td><span class="cqa-lang">${esc((r.language || '—').toUpperCase())}</span></td>
       <td class="cqa-col-right">${score}</td>
@@ -421,6 +427,7 @@ class ConversationList extends CqaElement {
     const f = t.dataset.f;
     if (f === 'all') { this.filtered().forEach((r) => (t.checked ? this.s.selected.add(r.id) : this.s.selected.delete(r.id))); this.renderTable(); }
     else if (f === 'dataset') { this.s.dataset = t.value; this.loadRows().then(() => { if (this.alive) { this.renderToolbar(); this.renderTable(); } }).catch((er) => toast(er.message, 'error')); }
+    else if (f === 'flag') { this.s.flag = t.value; this.renderTable(); }
     else if (f === 'checklist') this.s.checklistId = +t.value;
     else if (f === 'provider') this.s.provider = t.value;
   }
