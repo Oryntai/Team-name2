@@ -125,7 +125,8 @@ def _insights(db, dialogues, criteria):
             data = json.loads(raw)
         except (TypeError, ValueError):
             continue
-        if not isinstance(data, dict):
+        # Разбор ещё идёт или завершился ошибкой — не данные (у готового status = "ok").
+        if not isinstance(data, dict) or data.get("status", "ok") != "ok":
             continue
         covered += 1
         topic = data.get("topic")

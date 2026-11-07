@@ -1,6 +1,7 @@
 import { CqaElement } from '../base.js';
 import { esc, icon, toast, fmtInt, fmtPts, CHANNEL_LABEL, checklistLabel } from '../util.js';
 import '../dropdown.js';
+import { INSIGHT_FLAGS } from '../insights.js';
 
 const pct = (v) => v == null ? '—' : `${fmtPts(v * 100)}%`;
 const card = (d) => `#/c/${encodeURIComponent(d.id)}?e=${d.evaluation_id}`;
@@ -116,9 +117,9 @@ class Analytics extends CqaElement {
     const slices = this.fold('analytics-slices', 'Языки и каналы', `${d.slices.language.length} языков · ${d.slices.channel.length} каналов`,
       ['language', 'channel'].map(field => table([field === 'language' ? 'Язык' : 'Канал', 'Диалоги', 'Средний итог', 'Грубые нарушения', 'Оценки разошлись'],
         d.slices[field].map(g => `<tr><td>${esc(field === 'channel' ? CHANNEL_LABEL(g.value) : g.value)}</td><td>${g.evaluated}</td><td>${fmtPts(g.average_total)}</td><td>${pct(g.gross_rate)}</td><td>${pct(g.disagreement_rate)}</td></tr>`).join(''))).join(''));
-    const insights = d.insights ? this.fold('analytics-topics', 'Темы обращений', `${d.insights.covered} диалогов с разбором`,
+    const insights = d.insights?.covered ? this.fold('analytics-topics', 'Темы обращений', `${d.insights.covered} диалогов с разбором`,
       table(['Тема', 'Диалоги', 'Средний итог', 'Частое нарушение'], d.insights.topics.map(t => `<tr><td>${esc(t.topic)}</td><td>${t.count}</td><td>${fmtPts(t.average_total)}</td><td>${t.top_violation ? `${esc(t.top_violation.id)} · ${esc(t.top_violation.title)} (${t.top_violation.count})` : '—'}</td></tr>`).join('')) +
-      `<div class="cqa-analytics-links">${d.insights.flags.map(f => `<span>${esc(f.code)} <b>${f.count}</b></span>`).join('') || '<span class="cqa-muted">Флагов нет</span>'}</div>`) : '';
+      `<div class="cqa-analytics-links">${d.insights.flags.map(f => `<span>${esc(INSIGHT_FLAGS[f.code] || f.code)} <b>${f.count}</b></span>`).join('') || '<span class="cqa-muted">Флагов нет</span>'}</div>`) : '';
     this.part('report').innerHTML = summary + notes + (s.evaluated ? '' : '<p class="cqa-muted">Успешных оценок по этому чек-листу пока нет.</p>') +
       criteria + this.histogram(d.histogram) + slices + accuracy + queue + appeals + insights;
   }

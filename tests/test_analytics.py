@@ -156,7 +156,8 @@ def test_empty_and_all_na_have_no_fabricated_rates(db):
     assert data["summary"]["disagreement_rate"] is None
     assert data["criteria"][0]["violation_rate"] is None
     assert data["criteria"][0]["accuracy"]["n"] == 0
-    assert data["review_queue"] == [] and data["insights"] is None
+    # Таблица разборов есть всегда (схема базы); без разборов — пустая сводка, ничего не выдумано.
+    assert data["review_queue"] == [] and data["insights"] == {"covered": 0, "topics": [], "flags": []}
     conversation(db, "a")
     evaluation(db, "a", ("N/A", "N/A", "Нет"))
     data = analytics.report(db)
@@ -232,9 +233,9 @@ def test_review_queue_reasons_and_stable_sample(db):
 
 def test_insights_optional_latest_matching_evaluation_and_flag_counts(db):
     ev = populated(db)
-    db.ex("CREATE TABLE insights(conversation_id TEXT, evaluation_id INTEGER, created_at TEXT, model TEXT, cost_usd REAL, data TEXT)")
     def add(cid, eid, created, data):
-        db.ex("INSERT INTO insights VALUES(?,?,?,'fake',0,?)", (cid, eid, created, json.dumps(data)))
+        db.ex("INSERT INTO insights(conversation_id, evaluation_id, created_at, model, cost_usd, data) VALUES(?,?,?,'fake',0,?)",
+              (cid, eid, created, json.dumps(data)))
     add("a", ev, "2026-01-01", {"topic": "Старая тема", "flags": []})
     add("a", ev, "2026-02-01", {"topic": "Вход", "flags": [{"code": "risk", "turns": [1]}, {"code": "risk", "turns": [2]}]})
     add("a", ev - 1, "2026-03-01", {"topic": "Не та оценка", "flags": [{"code": "stale"}]})
@@ -247,7 +248,12 @@ def test_insights_optional_latest_matching_evaluation_and_flag_counts(db):
     assert insights["flags"] == [{"code": "risk", "count": 2}]
     assert analytics.report(db, "missing")["insights"] == {"covered": 0, "topics": [], "flags": []}
     c = db.one("SELECT id FROM evaluations WHERE conversation_id='c'")["id"]
-    db.ex("INSERT INTO insights VALUES('c',?,'2026-03-01','fake',0,'broken JSON')", (c,))
+    db.ex("INSERT INTO insights(conversation_id, evaluation_id, created_at, model, cost_usd, data) "
+          "VALUES('c',?,'2026-03-01','fake',0,'broken JSON')", (c,))
+    assert analytics.report(db)["insights"] == insights
+    # Незаконченный или ошибочный разбор не считается готовым.
+    add("c", c, "2026-03-02", {"status": "error", "error": "x"})
+    add("c", c, "2026-03-03", {"status": "running"})
     assert analytics.report(db)["insights"] == insights
 
 
