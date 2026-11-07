@@ -107,6 +107,7 @@ class AppealIn(BaseModel):
     evaluation_id: int
     criterion_id: str
     comment: str | None = ""
+    reason_code: Literal["wrong_interpretation", "wrong_evidence", "wrong_na", "other"] = "other"
 
 
 class CalibrationIn(BaseModel):
@@ -271,6 +272,7 @@ def create_app(db_path: str | os.PathLike | None = None, *, web_dir: str | os.Pa
 
     def appeal_short(a: dict) -> dict:
         return {"id": a["id"], "comment": a["comment"], "status": a["status"], "new_answer": a["new_answer"],
+                "reason_code": a["reason_code"],
                 "reason": a["reason"], "created_at": a["created_at"], "decided_at": a["decided_at"]}
 
     def section_view(s: dict | None) -> dict | None:
@@ -332,6 +334,12 @@ def create_app(db_path: str | os.PathLike | None = None, *, web_dir: str | os.Pa
         o = (ev["answers"] or {}).get(a["criterion_id"]) or {}
         so, sf, orig, _ = scores(ev, all_appeals)
         before = final_answers(orig, [x for x in all_appeals if x["id"] < a["id"]]).get(a["criterion_id"])
+        # История решения: итог непосредственно до и после него, без более поздних решений.
+        decided = [x for x in all_appeals if x["status"] != "open"]
+        prior = (decided if a["status"] == "open" else
+                 [x for x in decided if (x["decided_at"] or "", x["id"]) < (a["decided_at"] or "", a["id"])])
+        _, score_before, _, _ = scores(ev, prior)
+        _, score_after, _, _ = scores(ev, prior + ([a] if a["status"] != "open" else []))
         ev_n = o.get("evidence") or []
         return {"id": a["id"], "evaluation_id": ev["id"], "conversation_id": ev["conversation_id"],
                 "channel": conv.get("channel"), "language": conv.get("language"),
@@ -340,8 +348,11 @@ def create_app(db_path: str | os.PathLike | None = None, *, web_dir: str | os.Pa
                 "allowed": allowed_answers(c) if c else [], "original_answer": o.get("answer"),
                 "current_answer": before, "explanation": o.get("explanation", ""), "evidence": ev_n,
                 "evidence_replies": [r for r in (reply(conv["transcript"], n) for n in ev_n) if r],
-                "comment": a["comment"], "status": a["status"], "new_answer": a["new_answer"], "reason": a["reason"],
+                "comment": a["comment"], "reason_code": a["reason_code"],
+                "status": a["status"], "new_answer": a["new_answer"], "reason": a["reason"],
                 "created_at": a["created_at"], "decided_at": a["decided_at"],
+                "total_before_decision": score_before["total"] if score_before else ev["total"],
+                "total_after_decision": score_after["total"] if score_after else ev["total"],
                 "total_original": so["total"] if so else ev["total"], "total_final": sf["total"] if sf else ev["total"]}
 
     def has_local_audio(cid: str) -> pathlib.Path | None:
@@ -822,7 +833,7 @@ def create_app(db_path: str | os.PathLike | None = None, *, web_dir: str | os.Pa
             _fail(422, "Добавьте комментарий: что именно вы оспариваете.")
         if db.open_appeal(ev["id"], body.criterion_id):
             _fail(409, "По этому критерию уже есть открытая апелляция.")
-        a_id = db.create_appeal(ev["id"], body.criterion_id, comment)
+        a_id = db.create_appeal(ev["id"], body.criterion_id, comment, body.reason_code)
         return appeal_full(db.appeal(a_id), ev)
 
     @app.post("/api/appeals/{appeal_id}/decision")
