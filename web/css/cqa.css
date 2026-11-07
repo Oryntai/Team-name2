@@ -1017,3 +1017,35 @@ cqa-journal td .cqa-fold-toggle { padding: 3px 0; font-size: 11px; color: var(--
   .cqa-fold-toggle > .cqa-icon, .cqa-fold-toggle[aria-expanded="true"] > .cqa-icon,
   cqa-checklist-editor .cqa-ec-caret, cqa-checklist-editor .cqa-ec.is-open .cqa-ec-caret { transition: none; }
 }
+/* Встроенный вопрос: поле и короткие примеры, ответ следующей строкой. */
+cqa-ask[compact] { max-width: none; margin: 0 0 20px; }
+cqa-ask[compact] .cqa-ask-entry { display: flex; align-items: center; gap: 14px; }
+cqa-ask[compact] .cqa-ask-form { flex: 1; min-width: 300px; }
+cqa-ask[compact] .cqa-ask-compose { margin: 0; gap: 8px; }
+cqa-ask[compact] .cqa-input { background: white; }
+cqa-ask[compact] .cqa-ask-examples { flex-direction: row; flex: 0 1 auto; min-width: 0; margin: 0; overflow-x: auto; }
+cqa-ask[compact] .cqa-ask-examples .cqa-btn { flex: none; white-space: nowrap; font-size: 12px; padding: 6px; }
+cqa-ask[compact] .cqa-ask-result:empty { display: none; }
+cqa-ask[compact] .cqa-ask-result { margin-top: 12px; }
+.cqa-analytics-summary { align-items: center; gap: 6px 16px; }
+.cqa-analytics-method { margin-left: auto; color: var(--cqa-faint); font-weight: 400; }
+.cqa-analytics-summary [data-part="insights-action"] { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; }
+.cqa-analytics-toggle { flex-wrap: nowrap; }
+.cqa-analytics-toggle > span:first-child { flex-shrink: 0; }
+.cqa-analytics-toggle > .cqa-muted { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+cqa-analytics [data-criterion-row] { cursor: pointer; }
+cqa-analytics [data-criterion-row]:hover { background: var(--cqa-mint-50); }
+.cqa-analytics-rate { display: flex; align-items: center; gap: 8px; white-space: nowrap; }
+.cqa-analytics-rate .cqa-bar { width: 64px; height: 5px; flex: none; }
+.cqa-analytics-rate .cqa-bar-fill { background: var(--cqa-no); }
+.cqa-analytics-toggle > .cqa-icon { flex: none; }
+@media (max-width: 640px) {
+  cqa-ask[compact] .cqa-ask-entry { flex-direction: column; align-items: stretch; gap: 6px; }
+  cqa-ask[compact] .cqa-ask-form { min-width: 0; }
+  cqa-ask[compact] .cqa-ask-compose { flex-wrap: nowrap; }
+  cqa-ask[compact] .cqa-ask-compose .cqa-input { flex-basis: auto; }
+  cqa-ask[compact] .cqa-ask-examples { max-width: 100%; }
+  .cqa-analytics-toggle { align-items: flex-start; flex-wrap: wrap; gap: 4px 10px; }
+  .cqa-analytics-toggle > span:first-child { flex: 1; }
+  .cqa-analytics-toggle > .cqa-muted { flex-basis: 100%; order: 1; }
+}
