@@ -99,6 +99,11 @@ class ChecklistEditor extends CqaElement {
   isDirty() { return !!this.s.loaded && !same(cleanConfig(this.s.draft), cleanConfig(this.s.loaded.config)); }
   refConfig() { return this.isDirty() ? this.s.loaded.config : (this.s.parent?.config || null); }
   refCrit(id) { return (this.refConfig()?.criteria || []).find((x) => x.id === id) || null; }
+  // Переименованный критерий со старым пояснением: модель получит указания от прежнего критерия.
+  staleGuidance(c, diff = this.critDiff(c)) {
+    return diff.fields.includes('title') && !diff.fields.includes('guidance') && !!(c.guidance || '').trim();
+  }
+
   critDiff(c) {
     const ref = this.refConfig();
     if (!ref) return { isNew: false, fields: [] };
@@ -210,6 +215,7 @@ class ChecklistEditor extends CqaElement {
           <input class="cqa-input" data-path="c.${i}.steps.${k}.text" value="${esc(s.text || '')}" placeholder="Когда ставится эта ступень" aria-label="Описание ступени">
           <button type="button" class="cqa-btn cqa-btn--ghost cqa-btn--icon cqa-btn--sm" data-act="del-step" data-i="${i}" data-k="${k}" title="Удалить ступень">${icon('x')}</button></div>`).join('')}
           <div><button type="button" class="cqa-btn cqa-btn--xs" data-act="add-step" data-i="${i}">${icon('plus')}Ступень</button></div></div></div>` : ''}
+      <p class="cqa-field-warn cqa-span-6" data-part="guidance-warn" ${this.staleGuidance(c, diff) ? '' : 'hidden'}>${icon('alert')}Название изменено, а пояснение для модели — от прежнего критерия. Замените его: «Подсказка ИИ» → «Вставить в пояснение», или сотрите.</p>
       ${this.foldHtml(`guidance-${c.id}`, 'Пояснение для модели', `<label class="cqa-field ${ch('guidance')}"><span class="cqa-sr">Пояснение для модели</span><textarea class="cqa-textarea" rows="3" data-path="c.${i}.guidance">${esc(c.guidance || '')}</textarea></label>`, 'cqa-span-6')}
     </div>`;
     return `<div class="cqa-ec ${open ? 'is-open' : ''}" data-crit="${esc(c.id)}">
@@ -513,6 +519,8 @@ class ChecklistEditor extends CqaElement {
     const card = c && this.querySelector(`.cqa-ec[data-crit="${CSS.escape(c.id)}"]`);
     if (!card) return;
     const diff = this.critDiff(c);
+    const warn = card.querySelector('[data-part="guidance-warn"]');
+    if (warn) warn.hidden = !this.staleGuidance(c, diff);
     card.querySelectorAll('[data-path]').forEach((inp) => {
       const f = inp.dataset.path.split('.')[2];
       const wrap = inp.closest('.cqa-field');
