@@ -29,6 +29,7 @@ import sys
 from decimal import ROUND_HALF_UP, Decimal
 
 from . import checklist as ck
+from . import precedents
 from . import sources
 from .db import DB, DEFAULT_DB, ROOT
 from .incremental import fingerprints
@@ -376,6 +377,15 @@ async def _run_set(args) -> int:
     db = DB(args.db)
     db.seed_default_checklist()
     config = official_config()
+    dev_file = ROOT / "data" / "dev.json"
+    if not db.conversation_ids("DEV") and dev_file.exists():  # без транскриптов DEV прецедентам не из чего выбирать
+        gid, total, records = sources.parse_bytes(dev_file.read_bytes())
+        db.save_dataset(gid or "DEV", "file:data/dev.json", records, total)
+    reference = json.loads(precedents.REFERENCE.read_text(encoding="utf-8"))["dialogs"]
+    n_prec, k_prec = sum(1 for cid in reference if db.conversation(cid)), int(os.environ.get("CQA_PRECEDENTS", "2"))
+    print(f"Прецеденты: {n_prec} размеченных диалогов в базе, по {k_prec} к каждому оцениваемому."
+          + (" ВНИМАНИЕ: базы прецедентов нет — точность будет ниже замеренной." if k_prec and not n_prec else ""),
+          flush=True)
     try:
         ids = await _dataset_ids(db, args)
     except (sources.SourceError, OSError) as e:
