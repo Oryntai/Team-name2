@@ -60,6 +60,8 @@ function httpClient(base) {
     uploadDataset: (file) => { const fd = new FormData(); fd.append('file', file); return req('POST', '/datasets/upload', fd, true); },
     conversations: (params) => req('GET', `/conversations${q(params)}`),
     conversation: (id) => req('GET', `/conversations/${enc(id)}`),
+    translation: (id) => req('GET', `/conversations/${enc(id)}/translation`),
+    translate: (id) => req('POST', `/conversations/${enc(id)}/translate`),
     evaluation: (id) => req('GET', `/evaluations/${enc(id)}`),
     startRun: (body) => req('POST', '/runs', body),
     planRun: (body) => req('POST', '/runs/plan', body),

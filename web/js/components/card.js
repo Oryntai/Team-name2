@@ -13,7 +13,8 @@ class Card extends CqaElement {
   init() {
     this.convId = this.getAttribute('conversation-id');
     this.evalId = this.getAttribute('evaluation-id');
-    this.s = { conv: null, ev: null, cfg: null, meta: null, checklists: [], evals: [], appealFor: null, active: null, rerunOpen: false, run: null, pop: null, thinkingTab: 0 };
+    this.s = { conv: null, ev: null, cfg: null, meta: null, checklists: [], evals: [], appealFor: null, active: null, rerunOpen: false, run: null, pop: null, thinkingTab: 0,
+      translation: null, translationUsage: null, translationBusy: false, showTranslation: false };
     this.innerHTML = '<div class="cqa-loading"><span class="cqa-spinner cqa-spinner--lg"></span>Открываю диалог…</div>';
     this.addEventListener('click', (e) => this.onClick(e));
     this.addEventListener('submit', (e) => this.onSubmit(e));
@@ -34,6 +35,14 @@ class Card extends CqaElement {
     try {
       const [conv, meta, checklists] = await Promise.all([this.api.conversation(this.convId), this.api.meta(), this.api.checklists()]);
       this.s.conv = conv; this.s.meta = meta; this.s.checklists = checklists || [];
+      if (this.canTranslate() && !this.api.mock) {
+        try {
+          const saved = await this.api.translation(this.convId);
+          this.s.translationUsage = saved;
+          this.s.translation = saved.translation;
+          this.s.showTranslation = !!saved.translation;
+        } catch (e) { if (this.alive) toast(e.message, 'error'); }
+      }
       this.s.evals = [...(conv.evaluations || [])].sort((a, b) => String(b.created_at || '').localeCompare(String(a.created_at || '')) || (b.evaluation_id - a.evaluation_id));
       const id = this.evalId || this.s.evals[0]?.evaluation_id;
       if (id != null) await this.loadEval(id);
@@ -119,11 +128,67 @@ class Card extends CqaElement {
     const pii = (this.s.conv.transcript || []).reduce((a, m) => a + (m.pii?.length || 0), 0);
     return `<div class="cqa-transcript-head">
       <h2>Транскрипт</h2>
-      <span class="cqa-faint" style="font-size:12px">метки времени — как в исходных данных</span>
       <span class="cqa-spacer"></span>
+      <span data-part="translation-tools">${this.translationToolsHtml()}</span>
       ${pii ? `<span class="cqa-badge cqa-badge--warn" title="Эти фрагменты заменены метками до отправки модели">${icon('lock')}скрыто от модели: ${pii}</span>` : ''}
       <span class="cqa-badge cqa-badge--ghost" title="Реплики бота и системные события модель видит как контекст, но оценивает только оператора">оценивается только оператор</span>
     </div>`;
+  }
+
+  canTranslate() { return (this.s.conv?.language || '').trim().toLowerCase() !== 'ru'; }
+
+  translationToolsHtml() {
+    if (!this.canTranslate()) return '';
+    const cost = this.s.translationUsage?.model_calls
+      ? `<span class="cqa-muted cqa-translation-cost" title="Стоимость всех попыток перевода">Перевод · ${esc(fmtMoney(this.s.translationUsage.cost_usd))}</span>` : '';
+    if (this.s.translation) {
+      return `<span class="cqa-row"><span class="cqa-segctl cqa-translation-switch" role="group" aria-label="Перевод диалога">
+        <button type="button" data-act="translation-original" aria-pressed="${!this.s.showTranslation}">Оригинал</button>
+        <button type="button" data-act="translation-show" aria-pressed="${this.s.showTranslation}">С переводом</button>
+      </span>${cost}</span>`;
+    }
+    return `<span class="cqa-row"><button type="button" class="cqa-btn cqa-btn--sm cqa-btn--ghost" data-act="translate"
+      ${this.s.translationBusy || this.api.mock ? 'disabled' : ''} title="${this.api.mock ? 'Перевод доступен на сервере' : 'Claude Haiku 5.5 · ПДн скрыты · только для чтения'}">
+      ${this.s.translationBusy ? '<span class="cqa-spinner"></span>Перевожу…' : icon('spark') + 'Перевести на русский'}</button>${cost}</span>`;
+  }
+
+  translationHtml(n) {
+    const t = this.s.translation?.data.find((item) => item.turn === n);
+    return `<div class="cqa-translation ${this.s.showTranslation && t ? 'is-visible' : ''}" data-translation="${n}"
+      aria-hidden="${!this.s.showTranslation || !t}"><div lang="ru">${esc(t?.text || '')}</div></div>`;
+  }
+
+  updateTranslation() {
+    const focused = this.part('translation-tools').contains(document.activeElement) ? document.activeElement.dataset.act : null;
+    this.part('translation-tools').innerHTML = this.translationToolsHtml();
+    if (focused) this.part('translation-tools').querySelector(`[data-act="${focused}"]`)?.focus({ preventScroll: true });
+    for (const el of this.querySelectorAll('[data-translation]')) {
+      const t = this.s.translation?.data.find((item) => item.turn === +el.dataset.translation);
+      el.firstElementChild.textContent = t?.text || '';
+      el.classList.toggle('is-visible', this.s.showTranslation && !!t);
+      el.setAttribute('aria-hidden', String(!this.s.showTranslation || !t));
+    }
+  }
+
+  async translate() {
+    if (this.s.translationBusy || this.s.translation) return;
+    this.s.translationBusy = true;
+    this.updateTranslation();
+    try {
+      const saved = await this.api.translate(this.convId);
+      if (!this.alive) return;
+      this.s.translationUsage = saved;
+      this.s.translation = saved.translation;
+      this.s.showTranslation = true;
+    } catch (e) {
+      if (!this.alive) return;
+      toast(e.message, 'error');
+      // Даже невалидный ответ модели мог стоить денег.
+      try { this.s.translationUsage = await this.api.translation(this.convId); } catch { /* исходная ошибка уже показана */ }
+    } finally {
+      this.s.translationBusy = false;
+      if (this.alive) this.updateTranslation();
+    }
   }
 
   playerHtml() {
@@ -158,11 +223,11 @@ class Card extends CqaElement {
       const text = this.textWithPii(m);
       const seek = m.audio_offset != null ? `<button type="button" class="cqa-link" data-seek="${m.n}" title="Прослушать с этого места">${icon('play')}${fmtClock(m.audio_offset)}</button>` : '';
       if (role === 'system') {
-        return `<div class="cqa-msg cqa-msg--system" data-n="${m.n}"><div class="cqa-bubble"><span class="cqa-sys-n">#${m.n}</span>${text}<span class="cqa-msg-ts cqa-faint" title="${esc(m.timestamp)}">${esc(fmtTs(m.timestamp))}</span>${seek}</div></div>`;
+        return `<div class="cqa-msg cqa-msg--system" data-n="${m.n}"><div class="cqa-bubble"><span class="cqa-sys-n">#${m.n}</span>${text}<span class="cqa-msg-ts cqa-faint" title="${esc(m.timestamp)}">${esc(fmtTs(m.timestamp))}</span>${seek}</div>${this.translationHtml(m.n)}</div>`;
       }
       return `<div class="cqa-msg cqa-msg--${role}" data-n="${m.n}">
         <div class="cqa-msg-meta"><span class="cqa-msg-n">#${m.n}</span><span class="cqa-msg-role">${ROLE_LABEL[role]}</span><span class="cqa-msg-ts" title="${esc(m.timestamp)}">${esc(fmtTs(m.timestamp))}</span>${seek}</div>
-        <div class="cqa-bubble">${text}</div></div>`;
+        <div class="cqa-bubble">${text}</div>${this.translationHtml(m.n)}</div>`;
     }).join('');
   }
 
@@ -569,7 +634,7 @@ class Card extends CqaElement {
   /* ---------- события ---------- */
   onClick(e) {
     const t = e.target;
-    if (this.s.pop && !t.closest('.cqa-pop, .cqa-mark, .cqa-crit')) this.closePop();
+    if (this.s.pop && !t.closest('.cqa-pop, .cqa-mark, .cqa-crit, [data-part="translation-tools"]')) this.closePop();
     const mark = t.closest('.cqa-mark');
     if (mark) {
       e.preventDefault();
@@ -595,7 +660,12 @@ class Card extends CqaElement {
     const act = t.closest('[data-act]');
     if (act) {
       const a = act.dataset.act;
-      if (a === 'pop-close') this.closePop();
+      if (a === 'translate') this.translate();
+      else if (a === 'translation-original' || a === 'translation-show') {
+        this.s.showTranslation = a === 'translation-show';
+        this.updateTranslation();
+      }
+      else if (a === 'pop-close') this.closePop();
       else if (a === 'thinking-open' || a === 'thinking-tab') {
         if (a === 'thinking-tab') this.s.thinkingTab = +act.dataset.i; else this.s.thinkingTab = 0;
         let d = this.part('thinking-dialog');

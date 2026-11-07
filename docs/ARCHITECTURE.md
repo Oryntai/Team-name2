@@ -37,6 +37,7 @@ API организаторов (GET ?group_id=…) ─┐
 | `cqa/judge/` | промпт и JSON-схема из чек-листа, провайдеры моделей, `evaluate()` | ядро |
 | `cqa/checklists/default.json` | начальная конфигурация (PDF организаторов) | ядро |
 | `cqa/assist.py` | черновик пояснения и замечания к критерию: один вызов существующего провайдера | сервер |
+| `cqa/translate.py` | перевод маскированных реплик на русский для проверяющего, отдельно от оценки | сервер |
 | `cqa/sandbox.py` | проба черновика на трёх диалогах параллельно, без записи в базу | сервер |
 | `cqa/db.py` | SQLite: схема и запросы | сервер |
 | `cqa/sources.py` | импорт из API организаторов и из файла | сервер |
@@ -159,6 +160,8 @@ evaluations(id PK, run_id, conversation_id, checklist_id, created_at, provider, 
 run_items(run_id, pos, conversation_id, status, evaluation_id, error, previous_evaluation_id)
 appeals(id PK, evaluation_id, criterion_id, comment, created_at, status open|confirmed|changed,
         new_answer, reason, decided_at)
+translations(conversation_id, lang, created_at, model, cost_usd, data JSON, PK(conversation_id, lang))
+translation_calls(id PK, conversation_id, lang, created_at, model, cost_usd, status, error)
 ```
 Финальные ответы = ответы модели, поверх — решения проверяющего со статусом `changed`. Итог считается заново
 из ответов при каждом чтении (`scoring.score`), в `evaluations.total` — исходный итог для списка.
@@ -180,6 +183,8 @@ appeals(id PK, evaluation_id, criterion_id, comment, created_at, status open|con
 | `POST /api/datasets/upload` | multipart `file` (формат API организаторов, список записей или одна запись) | то же |
 | `GET /api/conversations` | `?dataset_id=&language=&channel=` | `[{"id","dataset_id","channel","language","n_replies","duration","latest": {"evaluation_id","checklist_id","checklist_label","status","total","final_total","gross","created_at"} \| null, "appeals": {"open","decided"}}]` |
 | `GET /api/conversations/{id}` | — | `{"id","dataset_id","channel","language","audio_src" \| null, "call_metrics": object \| null, "transcript": [{"n","timestamp","speaker","text","audio_offset" \| null,"pii": [{"start","end","type","label"}]}], "evaluations": [{"evaluation_id","checklist_label","provider","model","created_at","status","total","final_total","gross"}]}` |
+| `POST /api/conversations/{id}/translate` | без тела; `{"provider":"fake"}` только при `CQA_ALLOW_FAKE=1` | `{"translation": {"conversation_id","lang":"ru","created_at","model","cost_usd","data":[{"turn":1,"text":"…"}]}, "cost_usd", "model_calls"}` |
+| `GET /api/conversations/{id}/translation` | — | такой же ответ; `translation: null`, если перевода ещё нет |
 | `GET /api/evaluations/{id}` | — | см. ниже |
 | `POST /api/runs` | `{"conversation_ids"?: [...], "dataset_id"?, "checklist_id"?, "provider"?, "mode"?: "incremental"\|"full"}` | `{"run_id"}` (оценка идёт в фоне); режим по умолчанию `incremental` |
 | `POST /api/runs/plan` | те же поля, что у запуска | `{"mode","total","without_previous","model_calls","evaluated","reused","criteria": [{"id","title","evaluated","reused","definition_changed","weight_changed"}]}`; без запуска и записи |
@@ -196,6 +201,20 @@ appeals(id PK, evaluation_id, criterion_id, comment, created_at, status open|con
 | `POST /api/appeals` | `{"evaluation_id","criterion_id","comment"}` | `201` апелляция; `409`, если по критерию уже есть открытая |
 | `POST /api/appeals/{id}/decision` | `{"decision": "confirm"\|"change", "new_answer"?, "reason"}` | `{"appeal", "evaluation"}` (оценка уже с новым итогом) |
 | `GET /api/audio/{conversation_id}` | заголовок `Range` | `audio/mpeg` (206 при Range) |
+
+Перевод — один вызов Haiku 5.5 через существующий провайдер, независимо от модели оценки в настройках.
+Перед отправкой применяется `pii.mask_transcript`; строгий ответ — массив `{turn, text}` для всех реплик
+с номерами 1…N в исходном порядке, включая бота, системные события и пустые реплики. Проверяются типы,
+состав полей, полнота и нумерация; некорректный ответ — `502`, не кешируется. Пустой транскрипт, язык RU,
+недоступная модель или отключённая заглушка — `422`; неизвестный диалог — `404`.
+Успешный перевод сохраняется в `translations` и возвращается при повторных POST/GET без модели,
+в том числе после перезапуска. Одновременные POST к одному диалогу в процессе сервера объединяются
+блокировкой. Повторный импорт изменённого транскрипта или языка удаляет устаревший кеш.
+Каждая попытка записывается в `translation_calls`; стоимость берётся из usage провайдера, включая кеш
+токенов и ответы, не прошедшие проверку. Если провайдер завершился ошибкой без usage, записывается 0.
+Верхний `cost_usd` — сумма всех попыток, `model_calls` — их число; внутри `translation.cost_usd` — цена
+успешного вызова. Общая цена показана в карточке, даже после неуспешной попытки. Перевод и его стоимость
+не участвуют в оценке, прогонах и экспорте `results.json`. Заглушка возвращает явно тестовые строки.
 
 `POST /api/checklists/assist` принимает несохранённый черновик, включая проблемы формулировок (например, N/A без условия).
 В модель передаются все критерии и общие правила, целевой критерий выделяется отдельно; ответ проверяется по строгой схеме.

@@ -6,6 +6,7 @@
 """
 from __future__ import annotations
 
+import asyncio
 import contextlib
 import datetime as dt
 import logging
@@ -24,7 +25,7 @@ from pydantic import BaseModel, Field
 from starlette.background import BackgroundTask
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from . import assist, audio, callmetrics, judge, pii, sandbox, sources
+from . import assist, audio, callmetrics, judge, pii, sandbox, sources, translate
 from .checklist import allowed_answers, normalize, validate
 from .db import DB
 from .judge.providers import env as read_env
@@ -123,6 +124,10 @@ def _fail(status: int, message: str, errors: list[str] | None = None):
     raise HTTPException(status_code=status, detail={"detail": message, "errors": errors or [message]})
 
 
+class TranslateIn(BaseModel):
+    provider: Literal["haiku", "fake"] = "haiku"
+
+
 def create_app(db_path: str | os.PathLike | None = None, *, web_dir: str | os.PathLike | None = None,
                data_dir: str | os.PathLike | None = None, autoload_dev: bool = False,
                allow_fake: bool | None = None) -> FastAPI:
@@ -153,6 +158,7 @@ def create_app(db_path: str | os.PathLike | None = None, *, web_dir: str | os.Pa
 
     app = FastAPI(title="CQA — Conversation Quality Analytics", version="0.1.0", lifespan=lifespan)
     app.state.db, app.state.runner = db, runner
+    translation_locks: dict[str, asyncio.Lock] = {}
     app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
     app.add_middleware(CacheHeaders)
 
@@ -412,6 +418,37 @@ def create_app(db_path: str | os.PathLike | None = None, *, web_dir: str | os.Pa
                 "call_metrics": callmetrics.metrics(c),
                 "transcript": items,
                 "evaluations": [{**summary(e), "answers": e["answers"]} for e in db.evaluations_for(cid)]}
+
+    @app.get("/api/conversations/{cid}/translation")
+    async def conversation_translation(cid: str):
+        if not db.conversation(cid):
+            _fail(404, f"Диалог {cid} не найден.")
+        return db.translation(cid)
+
+    @app.post("/api/conversations/{cid}/translate")
+    async def conversation_translate(cid: str, body: TranslateIn | None = None):
+        # Соседние запросы к одному диалогу ждут тот же перевод, без повторной оплаты.
+        async with translation_locks.setdefault(cid, asyncio.Lock()):
+            record = db.record(cid)
+            if not record:
+                _fail(404, f"Диалог {cid} не найден.")
+            saved = db.translation(cid)
+            if saved["translation"]:
+                return saved
+            if (record.get("language") or "").strip().lower() == "ru":
+                _fail(422, "Диалог уже на русском.")
+            if not record["transcript"]:
+                _fail(422, "Транскрипт пуст.")
+            pid = (body or TranslateIn()).provider
+            if pid == "fake" and not allow_fake:
+                _fail(422, "Тестовый провайдер отключён.")
+            if not judge.available(pid):
+                _fail(422, "Модель недоступна: проверьте настройки провайдера.")
+            provider = translate.FakeTranslationProvider() if pid == "fake" else judge.get_provider(pid)
+            try:
+                return await translate.translate(db, record, provider)
+            except judge.ProviderError as e:
+                _fail(502, str(e))
 
     @app.get("/api/evaluations/{ev_id}")
     async def evaluation(ev_id: int):
