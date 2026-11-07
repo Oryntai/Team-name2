@@ -43,6 +43,12 @@ CREATE TABLE IF NOT EXISTS appeals(
   id INTEGER PRIMARY KEY AUTOINCREMENT, evaluation_id INTEGER, criterion_id TEXT, comment TEXT, created_at TEXT,
   status TEXT, new_answer TEXT, reason TEXT, decided_at TEXT);
 CREATE INDEX IF NOT EXISTS appeals_eval ON appeals(evaluation_id);
+CREATE TABLE IF NOT EXISTS translations(
+  conversation_id TEXT, lang TEXT, created_at TEXT, model TEXT, cost_usd REAL, data TEXT NOT NULL,
+  PRIMARY KEY(conversation_id, lang));
+CREATE TABLE IF NOT EXISTS translation_calls(
+  id INTEGER PRIMARY KEY AUTOINCREMENT, conversation_id TEXT, lang TEXT, created_at TEXT, model TEXT,
+  cost_usd REAL, status TEXT, error TEXT);
 """
 
 
@@ -126,13 +132,18 @@ class DB:
                       "total=excluded.total", (dataset_id, source, ts, total if total is not None else len(records)))
             for pos, r in enumerate(records):
                 tr = r["transcript"]
+                serialized = json.dumps(tr, ensure_ascii=False)
+                # При замене исходника старый перевод больше не соответствует его репликам.
+                c.execute("DELETE FROM translations WHERE conversation_id=? AND EXISTS "
+                          "(SELECT 1 FROM conversations WHERE id=? AND (transcript<>? OR language IS NOT ?))",
+                          (r["conversation_id"], r["conversation_id"], serialized, r.get("language")))
                 c.execute("INSERT INTO conversations(id, dataset_id, channel, language, transcript, audio_url, imported_at, "
                           "pos, n_replies, duration) VALUES(?,?,?,?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET "
                           "dataset_id=excluded.dataset_id, channel=excluded.channel, language=excluded.language, "
                           "transcript=excluded.transcript, audio_url=excluded.audio_url, imported_at=excluded.imported_at, "
                           "pos=excluded.pos, n_replies=excluded.n_replies, duration=excluded.duration",
                           (r["conversation_id"], dataset_id, r.get("channel"), r.get("language"),
-                           json.dumps(tr, ensure_ascii=False), r.get("audio_url"), ts, pos, len(tr), audio.duration(tr)))
+                           serialized, r.get("audio_url"), ts, pos, len(tr), audio.duration(tr)))
         return len(records)
 
     def list_datasets(self) -> list[dict]:
@@ -175,6 +186,27 @@ class DB:
 
     def conversation_ids(self, dataset_id: str) -> list[str]:
         return [r["id"] for r in self.q("SELECT id FROM conversations WHERE dataset_id=? ORDER BY pos, id", (dataset_id,))]
+
+    # --- переводы только для проверяющего, отдельно от оценок ---
+    def translation(self, cid: str, lang: str = "ru") -> dict:
+        row = self.one("SELECT * FROM translations WHERE conversation_id=? AND lang=?", (cid, lang))
+        if row:
+            row["data"] = _json(row["data"], [])
+        usage = self.one("SELECT COUNT(*) AS model_calls, COALESCE(SUM(cost_usd), 0) AS cost_usd "
+                         "FROM translation_calls WHERE conversation_id=? AND lang=?", (cid, lang))
+        return {"translation": row, **usage}
+
+    def save_translation_call(self, cid: str, model: str, cost: float, data: list | None,
+                              error: str | None = None, lang: str = "ru") -> None:
+        ts = now()
+        with self.lock, self.conn:
+            self.conn.execute("INSERT INTO translation_calls(conversation_id, lang, created_at, model, cost_usd, "
+                              "status, error) VALUES(?,?,?,?,?,?,?)",
+                              (cid, lang, ts, model, cost, "ok" if data is not None else "error", error))
+            if data is not None:
+                self.conn.execute("INSERT INTO translations(conversation_id, lang, created_at, model, cost_usd, data) "
+                                  "VALUES(?,?,?,?,?,?)", (cid, lang, ts, model, cost,
+                                                        json.dumps(data, ensure_ascii=False)))
 
     # --- чек-листы ---
     def list_checklists(self) -> list[dict]:

@@ -318,6 +318,12 @@ a.cqa-link:hover, .cqa-link:hover { text-decoration: underline; }
 .cqa-transcript-panel { display: flex; flex-direction: column; overflow: hidden; }
 .cqa-transcript-head { padding: 12px 16px; border-bottom: 1px solid var(--cqa-border); display: flex; align-items: center; gap: 10px; background: var(--cqa-surface); flex-wrap: wrap; }
 .cqa-transcript-head h2 { margin: 0; font-size: 14px; font-weight: 800; color: var(--cqa-green-950); }
+.cqa-translation-switch { border: 0; background: #fff; }
+.cqa-translation-cost { font-size: 11px; white-space: nowrap; }
+.cqa-translation { display: grid; grid-template-rows: 0fr; opacity: 0; color: var(--cqa-muted); font-size: 12px; font-weight: 400; width: 100%; transition: grid-template-rows 144ms ease-out, opacity 144ms ease-out; }
+.cqa-translation > div { min-height: 0; overflow: hidden; white-space: pre-wrap; overflow-wrap: anywhere; padding: 0 4px; }
+.cqa-translation.is-visible { grid-template-rows: 1fr; opacity: 1; transition-duration: 180ms; }
+@media (prefers-reduced-motion: reduce) { .cqa-translation, .cqa-translation.is-visible { transition: none; } }
 .cqa-player { display: flex; align-items: center; gap: 12px; padding: 10px 16px; background: var(--cqa-mint-50); border-bottom: 1px solid var(--cqa-mint-200); flex-wrap: wrap; }
 .cqa-player audio { flex: 1; min-width: 260px; height: 36px; }
 .cqa-player-label { font-weight: 800; font-size: 12.5px; color: var(--cqa-green-800); display: flex; gap: 6px; align-items: center; }
