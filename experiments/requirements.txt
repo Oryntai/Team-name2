@@ -1,0 +1,6 @@
+torch>=2.2
+transformers>=4.45,<6
+soundfile>=0.12
+scipy>=1.11
+scikit-learn>=1.4
+pypdf>=5
