@@ -1,6 +1,6 @@
 {
   "schema_version": "1.0",
-  "team_name": "Team-name2",
+  "team_name": "Название команды",
   "model": {
     "mode": "external_api",
     "name": "claude-haiku-5-5"

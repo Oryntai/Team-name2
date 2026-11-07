@@ -37,7 +37,7 @@ from .runner import Runner
 from .scoring import score
 
 SCHEMA_VERSION = "1.0"
-TEAM_NAME = "Team-name2"  # название команды для team_name; переопределяется CQA_TEAM_NAME или --team
+TEAM_NAME = "Название команды"  # так называется команда (владелец, 7.11); переопределяется CQA_TEAM_NAME или --team
 CODES = {"01": "contact", "02": "discovery", "03": "identification", "04": "consultation",
          "05": "empathy", "06": "dialogue", "07": "closure", "08": "critical"}
 # Таблица «Правила заполнения» (стр. 3 приложения): код → (допустимые value, вес). True/False — «Да»/«Нет», None — N/A.
