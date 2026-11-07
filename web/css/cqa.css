@@ -866,6 +866,7 @@ cqa-ask { display: block; max-width: 1000px; }
 .cqa-insight-topic { color: var(--cqa-green-700); max-width: 240px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 @media (prefers-reduced-motion: reduce) {
   .cqa-insight-detail, .cqa-insight.is-expanded .cqa-insight-detail, .cqa-insight-summary > .cqa-icon { transition: none; }
+}
 /* Аналитика: строки и раскрывающиеся подробности, без карточек и библиотек. */
 cqa-analytics { display: block; }
 .cqa-analytics-summary { display: flex; gap: 6px 20px; flex-wrap: wrap; margin: 8px 0 16px; }
@@ -924,7 +925,7 @@ cqa-card .cqa-pop { border: 0; box-shadow: none; }
 .cqa-appeal-reasons { flex-wrap: wrap; border: 0; background: white; padding: 0; }
 .cqa-appeal-reasons button { padding: 6px 8px; font-size: 12px; }
 .cqa-score-link { font-size: 12px; }
-.cqa-score-dialog { width: min(720px, calc(100vw - 24px)); background: white; border: 0; box-shadow: none; }
+.cqa-score-dialog { width: min(880px, calc(100vw - 24px)); background: white; border: 0; box-shadow: none; }
 .cqa-score-dialog[open] { animation: cqa-pop-in .18s ease-out; }
 .cqa-score-dialog.is-closing { animation: cqa-pop-out .144s ease-in forwards; }
 .cqa-score-dialog .cqa-dialog-body { max-height: 75vh; overflow: auto; gap: 12px; font-size: 13px; }
