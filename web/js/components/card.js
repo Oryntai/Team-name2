@@ -17,7 +17,7 @@ class Card extends CqaElement {
     this.evalId = this.getAttribute('evaluation-id');
     this.s = { insight: null, insightError: null, insightOpen: false, insightStarting: false, conv: null, ev: null, cfg: null, meta: null, checklists: [], evals: [], appealFor: null, active: null, rerunOpen: false, run: null, pop: null, thinkingTab: 0,
       translation: null, translationUsage: null, translationBusy: false, showTranslation: false,
-      blind: false, calAnswers: {}, comparison: null, calBusy: false };
+      blind: false, calAnswers: {}, comparison: null, calBusy: false, doubts: new Map() };
     this.innerHTML = '<div class="cqa-loading"><span class="cqa-spinner cqa-spinner--lg"></span>Открываю диалог…</div>';
     this.addEventListener('click', (e) => this.onClick(e));
     this.addEventListener('submit', (e) => this.onSubmit(e));
@@ -633,7 +633,10 @@ class Card extends CqaElement {
       : `<span class="cqa-answer" data-tone="${tone}">${esc(answerLabel(crit, fa))}</span>`;
     const m = /^(\d+)\/(\d+)$/.exec(orig.agreement || '');
     const split = m && +m[1] < +m[2] ? (orig.votes || []) : null;
-    return { def, crit, orig, fa, tone, changed, scored, pts, answer, split };
+    // Сомнение модели открыто, пока по критерию нет решения проверяющего (ответ на вопрос или апелляция).
+    const decided = (c.appeals || []).some((a) => a.status !== 'open');
+    const doubt = !!split && !decided && (c.positions || []).length > 1;
+    return { def, crit, orig, fa, tone, changed, scored, pts, answer, split, decided, doubt };
   }
 
   critHtml(c) {
@@ -645,7 +648,8 @@ class Card extends CqaElement {
         title="${esc(`${c.title} — ${answerLabel(v.crit, v.fa)}${v.scored ? ` · ${v.pts.main} (вес ${fmtPts(c.weight)})` : ''}`)}">
       <span class="cqa-crit-id">${esc(c.id)}</span>
       <span class="cqa-tile-title">${esc(c.title)}</span>
-      ${v.split ? `<span class="cqa-tile-flag" title="Три независимые оценки модели разошлись: ${esc(v.split.join(' · '))}">≠</span>` : ''}
+      ${v.doubt ? `<span class="cqa-tile-flag cqa-tile-flag--ask" title="${esc(`Модель спрашивает: три её оценки разошлись (${v.split.join(' · ')})`)}">${icon('help')}</span>`
+        : v.split ? `<span class="cqa-tile-flag" title="${esc(`Три оценки модели разошлись (${v.split.join(' · ')}); решение принял проверяющий`)}">≠</span>` : ''}
       ${c.appeal?.status === 'open' ? `<span class="cqa-tile-flag cqa-tile-flag--warn" title="Апелляция на рассмотрении">${icon('gavel')}</span>` : ''}
       ${v.changed ? `<span class="cqa-tile-flag cqa-tile-flag--info" title="Изменено проверяющим">${icon('edit')}</span>` : ''}
       ${ans}
@@ -665,7 +669,7 @@ class Card extends CqaElement {
         <button type="button" class="cqa-pop-x" data-act="pop-close" aria-label="Закрыть">${icon('x')}</button></div>
       <div class="cqa-pop-verdict">${v.answer}<span class="cqa-pop-pts">${esc(v.pts.main)}</span></div>
       ${stepText ? `<div class="cqa-crit-step">${esc(stepText)}</div>` : ''}
-      ${v.split ? `<p class="cqa-pop-split">${icon('info')}<span>Модель оценила диалог трижды и разошлась: ${esc(v.split.join(' · '))}. Итог — по большинству; стоит проверить.</span></p>` : ''}
+      ${v.doubt ? this.doubtHtml(c, v, n) : v.split && !v.decided ? `<p class="cqa-pop-split">${icon('info')}<span>Модель оценила диалог трижды и разошлась: ${esc(v.split.join(' · '))}. Итог — по большинству; стоит проверить.</span></p>` : ''}
       ${v.orig.explanation ? `<p class="cqa-pop-text">${linkifyRefs(v.orig.explanation, n)}</p>` : ''}
       ${ev.length ? `<div class="cqa-crit-ev"><span class="cqa-ev-label">${esc(evidenceLabel(v.crit, v.orig.answer))}</span>${this.chipsHtml(ev)}</div>` : ''}
       ${c.reused_from != null ? `<p class="cqa-faint">Перенесено из оценки №${esc(c.reused_from)}: определение не менялось.</p>` : ''}
@@ -743,6 +747,7 @@ class Card extends CqaElement {
     this.querySelectorAll('.cqa-mark').forEach((el) => el.classList.toggle('is-on', el.dataset.mark === this.s.pop.crit && +el.dataset.n === this.s.pop.n));
     this.querySelectorAll('.cqa-crit').forEach((el) => el.classList.toggle('is-active', el.dataset.crit === this.s.pop.crit));
     this.highlight(this.s.pop.crit);
+    this.maybeLoadDoubt(this.s.pop.crit);
     requestAnimationFrame(() => pop.scrollIntoView({ block: 'nearest', behavior: 'smooth' }));
   }
 
@@ -758,6 +763,73 @@ class Card extends CqaElement {
     }).join('');
     const more = list.length > shown.length ? `<span class="cqa-faint">+${list.length - shown.length}</span>` : '';
     return chips + more;
+  }
+
+  /** «Модель спрашивает»: три оценки разошлись — вопрос проверяющему и довод каждой позиции. */
+  doubtHtml(c, v, n) {
+    const st = this.s.doubts.get(`${this.s.ev.id}:${c.id}`) || {};
+    const q = st.result?.questions?.[0];
+    const reviewer = getRole() === 'reviewer';
+    const positions = c.positions || [];
+    const total = positions.reduce((a, p) => a + p.count, 0);
+    const opt = (a) => q?.options?.find((o) => o.answer === a);
+    const ask = q ? `<p class="cqa-doubt-q">${esc(q.question)}</p>`
+      : st.loading ? '<p class="cqa-doubt-q cqa-doubt-q--wait"><span class="cqa-spinner"></span>Формулирую вопрос…</p>'
+        : st.error ? `<p class="cqa-faint">Вопрос не сформулирован (${esc(st.error)}). Ниже — доводы оценок.</p>` : '';
+    return `<div class="cqa-doubt" data-part="doubt">
+      <div class="cqa-doubt-head">${icon('help')}<b>Модель спрашивает</b><span class="cqa-doubt-votes">оценки разошлись: ${esc(positions.map((p) => `${answerLabel(v.crit, p.answer)} ×${p.count}`).join(' · '))}</span></div>
+      ${ask}
+      ${q?.existing_rule ? `<p class="cqa-doubt-rule">${icon('checklist')}<span>В чек-листе уже есть: «${esc(q.existing_rule)}» — оценки понимают это по-разному.</span></p>` : ''}
+      <div class="cqa-doubt-opts">${positions.map((p) => `<div class="cqa-doubt-opt">
+        <div class="cqa-doubt-opt-head"><span class="cqa-answer cqa-answer--sm" data-tone="${answerTone(v.crit, p.answer)}">${esc(answerLabel(v.crit, p.answer))}</span>
+          <b>${esc(opt(p.answer)?.label || `${p.count} из ${total} оценок`)}</b>
+          ${reviewer ? `<button type="button" class="cqa-btn cqa-btn--xs" data-act="doubt-pick" data-crit="${esc(c.id)}" data-answer="${esc(p.answer)}" ${st.saving ? 'disabled' : ''}>${icon('check')}Верно</button>` : ''}</div>
+        ${p.explanation ? `<p class="cqa-doubt-arg">${linkifyRefs(p.explanation, n)}</p>` : ''}
+      </div>`).join('')}</div>
+      <p class="cqa-doubt-note">${reviewer ? 'Ваш выбор станет решением по диалогу: итог пересчитается, а решение будет примером для похожих диалогов.' : 'Отвечает проверяющий (переключите роль): его выбор станет решением и примером для похожих диалогов.'}</p>
+    </div>`;
+  }
+
+  maybeLoadDoubt(cid) {
+    const c = (this.s.ev?.criteria || []).find((x) => x.id === cid);
+    if (!c || !this.critView(c).doubt) return;
+    const key = `${this.s.ev.id}:${cid}`;
+    if (this.s.doubts.has(key)) return;
+    this.s.doubts.set(key, { loading: true });
+    this.api.doubtQuestions({ criterion_id: cid, evaluation_id: this.s.ev.id })
+      .then((result) => this.s.doubts.set(key, { result }))
+      .catch((e) => this.s.doubts.set(key, { error: e.message }))
+      .finally(() => { if (this.alive) this.refreshDoubt(cid); });
+  }
+
+  refreshDoubt(cid) {
+    const box = this.querySelector('.cqa-pop [data-part="doubt"]');
+    const c = (this.s.ev?.criteria || []).find((x) => x.id === cid);
+    if (!box || !c || this.s.pop?.crit !== cid) return;
+    const v = this.critView(c);
+    if (v.doubt) box.outerHTML = this.doubtHtml(c, v, this.s.conv.transcript?.length || 0);
+  }
+
+  async resolveDoubt(cid, answer) {
+    const key = `${this.s.ev.id}:${cid}`;
+    const st = this.s.doubts.get(key) || {};
+    if (st.saving) return;
+    const q = st.result?.questions?.[0];
+    const opt = q?.options?.find((o) => o.answer === answer);
+    this.s.doubts.set(key, { ...st, saving: true });
+    this.refreshDoubt(cid);
+    try {
+      await this.api.resolveDoubt({ evaluation_id: this.s.ev.id, criterion_id: cid, answer,
+        question: q?.question || '', reason: opt ? `${opt.label}. ${opt.rule}` : '' });
+      toast(`Решение по ${cid} сохранено — итог пересчитан`);
+      emit('cqa-appeals-changed');
+      await this.reloadEval();
+    } catch (e) {
+      this.s.doubts.set(key, { ...st, saving: false });
+      this.refreshDoubt(cid);
+      toast(`Не удалось сохранить решение: ${e.message}`, 'error', 6000);
+      if (e.status === 409) await this.reloadEval();
+    }
   }
 
   appealHtml(c, crit) {
@@ -927,6 +999,7 @@ class Card extends CqaElement {
       } else if (a === 'thinking-close') this.part('thinking-dialog')?.close();
       else if (a === 'appeal-open') { this.s.appealFor = act.dataset.crit; this.renderPop(); this.querySelector('form[data-form="appeal"] textarea')?.focus(); }
       else if (a === 'appeal-cancel') { this.s.appealFor = null; this.renderPop(); }
+      else if (a === 'doubt-pick') this.resolveDoubt(act.dataset.crit, act.dataset.answer);
       else if (a === 'rerun-toggle') { this.s.rerunOpen = !this.s.rerunOpen; this.part('rerun').innerHTML = this.s.rerunOpen ? this.rerunHtml() : ''; act.setAttribute('aria-expanded', String(this.s.rerunOpen)); }
       else if (a === 'rerun-start') this.startRerun(act.closest('div'));
       return;

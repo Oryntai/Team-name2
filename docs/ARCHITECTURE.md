@@ -48,6 +48,7 @@ API организаторов (GET ?group_id=…) ─┐
 | `cqa/callmetrics.py` | справочные метрики звонка по ISO-меткам, без модели и влияния на итог | сервер |
 | `cqa/analytics.py` | аналитика и CSV по последним успешным оценкам, только чтение базы | сервер |
 | `cqa/calibrations.py` | слепая оценка человека, сравнение с исходными ответами ИИ и сводка согласия | сервер |
+| `cqa/doubts.py` | «Модель спрашивает»: спорные решения (голоса не единогласны) → доводы голосов из `raw` → один вызов модели на критерий: вопрос к формулировке, варианты с правилами для пояснения; кеш в `doubt_questions` | сервер |
 | `cqa/runner.py` | пакетные прогоны в фоне, прогресс, журнал | сервер |
 | `cqa/api.py`, `cqa/__main__.py` | FastAPI, раздача `web/` | сервер |
 | `web/` | интерфейс: HTML/CSS/JS без сборки, веб-компоненты `cqa-*` | интерфейс |
@@ -173,6 +174,8 @@ asks(id PK, created_at, question, answer, refs JSON, model, cost_usd, input_toke
 criterion_test_calls(id PK, created_at, conversation_id, checklist_id, criteria JSON, provider, model,
                      status, error, latency_s, input_tokens, output_tokens, cost_usd)
 calibrations(id PK, conversation_id, evaluation_id, checklist_id, reviewer, created_at, answers JSON, comment)
+doubt_questions(id PK, key, created_at, checklist_id, criterion_id, evaluation_ids JSON, model, cost_usd, latency_s,
+  data JSON)  -- вопросы модели к чек-листу; key = чек-лист + критерий + набор спорных решений
 ```
 Финальные ответы = ответы модели, поверх — решения проверяющего со статусом `changed`. Итог считается заново
 из ответов при каждом чтении (`scoring.score`), в `evaluations.total` — исходный итог для списка.
@@ -222,6 +225,9 @@ calibrations(id PK, conversation_id, evaluation_id, checklist_id, reviewer, crea
 | `GET /api/appeals` | `?status=open\|decided\|all` | `[{"id","evaluation_id","conversation_id","criterion_id","criterion_title","original_answer","explanation","evidence","evidence_replies": [{"n","timestamp","speaker","text"}],"comment","status","new_answer","reason","created_at","decided_at","total_original","total_final"}]` |
 | `POST /api/appeals` | `{"evaluation_id","criterion_id","comment","reason_code"?}` | `201` апелляция; `409`, если по критерию уже есть открытая |
 | `POST /api/appeals/{id}/decision` | `{"decision": "confirm"\|"change", "new_answer"?, "reason"}` | `{"appeal", "evaluation"}` (оценка уже с новым итогом) |
+| `GET /api/doubts` | `?dataset_id=` | `{"dialogs","decisions","disputed","checklist_id","checklist_ids","criteria": [{id,title,disputed,conversation_ids,questions \| null}],"all": [{id,title,decisions,disputed}]}` — без вызова модели |
+| `POST /api/doubts/questions` | `{"criterion_id", "dataset_id"? \| "evaluation_id"?, "refresh"?, "provider"?}` | `{"key","criterion_id","checklist_id","disputes","questions": [{question,conversation_ids,existing_rule,options: [{answer,label,rule}]}],"model","cost_usd","latency_s","cached"}`; `422`, если споров нет |
+| `POST /api/doubts/resolve` | `{"evaluation_id","criterion_id","answer","question"?,"reason"?}` | `{"appeal","evaluation"}` — решённая апелляция с `reason_code: model_doubt` (итог пересчитан, решение — прецедент); `409`, если уже решено или открыта апелляция оператора |
 | `GET /api/audio/{conversation_id}` | заголовок `Range` | `audio/mpeg` (206 при Range) |
 
 `reason_code` апелляции: `wrong_interpretation`, `wrong_evidence`, `wrong_na`, `other` (по умолчанию).

@@ -805,6 +805,33 @@ cqa-ask { display: block; max-width: 1000px; }
 .cqa-pop-text { margin: 10px 0 0; line-height: 1.5; color: var(--cqa-text); }
 .cqa-pop-split { display: flex; gap: 6px; align-items: flex-start; margin: 10px 0 0; padding: 7px 9px; border-radius: 8px;
   background: var(--cqa-mid-bg); color: #6d4708; font-size: 12.5px; line-height: 1.4; }
+/* «Модель спрашивает»: спорное решение — вопрос проверяющему и довод каждой оценки */
+.cqa-doubt { margin: 10px 0 0; padding: 10px 11px; border: 1px solid var(--cqa-mid-border); border-radius: var(--cqa-radius-sm); background: #fffaf0; }
+.cqa-doubt-head { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; color: #6d4708; font-size: 13px; }
+.cqa-doubt-head .cqa-icon { width: 15px; height: 15px; color: var(--cqa-mid); }
+.cqa-doubt-votes { color: var(--cqa-muted); font-size: 12px; }
+.cqa-doubt-q { margin: 7px 0 0; font-size: 14px; font-weight: 700; line-height: 1.45; color: var(--cqa-text); }
+.cqa-doubt-q--wait { display: flex; align-items: center; gap: 6px; font-weight: 500; color: var(--cqa-muted); }
+.cqa-doubt-rule { display: flex; gap: 6px; align-items: flex-start; margin: 6px 0 0; font-size: 12px; line-height: 1.4; color: var(--cqa-text-2); }
+.cqa-doubt-rule .cqa-icon { flex: none; width: 13px; height: 13px; margin-top: 1px; }
+.cqa-doubt-opts { display: grid; gap: 6px; margin-top: 8px; }
+.cqa-doubt-opt { padding: 7px 9px; border: 1px solid var(--cqa-border); border-radius: var(--cqa-radius-sm); background: var(--cqa-surface); }
+.cqa-doubt-opt-head { display: flex; align-items: center; gap: 8px; font-size: 13px; }
+.cqa-doubt-opt-head b { flex: 1; min-width: 0; }
+.cqa-doubt-arg { margin: 5px 0 0; font-size: 12.5px; line-height: 1.45; color: var(--cqa-text-2); }
+.cqa-doubt-note { margin: 7px 0 0; font-size: 12px; color: var(--cqa-muted); }
+.cqa-tile-flag--ask { color: #7a4d00; background: #fdf1d6; }
+.cqa-doubts { margin: 12px 0; }
+.cqa-doubts > p { margin: 6px 0 0; }
+.cqa-doubts-title { display: flex; align-items: center; gap: 6px; margin: 0; }
+.cqa-doubts-title .cqa-icon { width: 17px; height: 17px; color: var(--cqa-mid); }
+.cqa-doubt-row { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--cqa-border); }
+.cqa-doubt-row > .cqa-row { gap: 8px; flex-wrap: wrap; }
+.cqa-doubt--row { margin-top: 8px; }
+.cqa-doubt--row .cqa-faint { margin: 4px 0 0; font-size: 12px; }
+.cqa-doubt-fresh { display: flex; gap: 6px; align-items: flex-start; margin: 8px 0 0; padding: 8px 10px; border-radius: var(--cqa-radius-sm);
+  background: var(--cqa-yes-bg); color: var(--cqa-green-800); font-size: 13px; line-height: 1.45; }
+.cqa-doubt-fresh .cqa-icon { flex: none; width: 15px; height: 15px; margin-top: 2px; }
 .cqa-pop .cqa-crit-step { margin-top: 10px; }
 .cqa-pop .cqa-appeal { margin-top: 10px; }
 .cqa-think-btn { display: inline-flex; align-items: center; gap: 5px; font-weight: 700; }

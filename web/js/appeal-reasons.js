@@ -5,4 +5,6 @@ export const APPEAL_REASONS = {
   wrong_na: 'Неверный N/A',
   other: 'Другое',
 };
-export const appealReasonLabel = (code) => APPEAL_REASONS[code] || APPEAL_REASONS.other;
+// Не причина оператора: так сохраняется ответ проверяющего на вопрос модели (голоса разошлись).
+export const MODEL_DOUBT = 'model_doubt';
+export const appealReasonLabel = (code) => (code === MODEL_DOUBT ? 'Модель сомневалась' : APPEAL_REASONS[code] || APPEAL_REASONS.other);

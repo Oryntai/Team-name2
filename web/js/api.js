@@ -88,6 +88,9 @@ function httpClient(base) {
     appeals: (status = 'all') => req('GET', `/appeals${q({ status })}`),
     createAppeal: (body) => req('POST', '/appeals', body),
     decideAppeal: (id, body) => req('POST', `/appeals/${enc(id)}/decision`, body),
+    doubts: (datasetId) => req('GET', `/doubts${q({ dataset_id: datasetId })}`),
+    doubtQuestions: (body) => req('POST', '/doubts/questions', body),
+    resolveDoubt: (body) => req('POST', '/doubts/resolve', body),
     audioUrl: (id) => `${root}/audio/${enc(id)}`,
   };
 }

@@ -75,6 +75,10 @@ CREATE TABLE IF NOT EXISTS calibrations(
   FOREIGN KEY(conversation_id) REFERENCES conversations(id),
   FOREIGN KEY(evaluation_id) REFERENCES evaluations(id), FOREIGN KEY(checklist_id) REFERENCES checklists(id));
 CREATE INDEX IF NOT EXISTS calibrations_conv ON calibrations(conversation_id);
+CREATE TABLE IF NOT EXISTS doubt_questions(
+  id INTEGER PRIMARY KEY AUTOINCREMENT, key TEXT NOT NULL, created_at TEXT, checklist_id INTEGER, criterion_id TEXT,
+  evaluation_ids TEXT, model TEXT, cost_usd REAL DEFAULT 0, latency_s REAL DEFAULT 0, data TEXT NOT NULL);
+CREATE INDEX IF NOT EXISTS doubt_questions_key ON doubt_questions(key, id);
 """
 
 
@@ -477,6 +481,22 @@ class DB:
         for row in rows:
             row["answers"] = _json(row["answers"], {})
         return rows
+
+    # --- вопросы модели к чек-листу: тот же набор спорных решений не спрашиваем повторно ---
+    def save_doubt_questions(self, key: str, checklist_id: int, criterion_id: str, evaluation_ids: list[int],
+                             result: dict) -> int:
+        return self.ex("INSERT INTO doubt_questions(key, created_at, checklist_id, criterion_id, evaluation_ids, model, "
+                       "cost_usd, latency_s, data) VALUES(?,?,?,?,?,?,?,?,?)",
+                       (key, now(), checklist_id, criterion_id, json.dumps(evaluation_ids), result.get("model"),
+                        result.get("cost_usd") or 0, result.get("latency_s") or 0,
+                        json.dumps(result["questions"], ensure_ascii=False)))
+
+    def doubt_questions(self, key: str) -> dict | None:
+        r = self.one("SELECT * FROM doubt_questions WHERE key=? ORDER BY id DESC LIMIT 1", (key,))
+        if r:
+            r["questions"] = _json(r.pop("data"), [])
+            r["evaluation_ids"] = _json(r["evaluation_ids"], [])
+        return r
 
     # --- апелляции ---
     def create_appeal(self, evaluation_id: int, criterion_id: str, comment: str, reason_code: str = "other") -> int:

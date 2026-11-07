@@ -25,7 +25,8 @@ from pydantic import BaseModel, Field
 from starlette.background import BackgroundTask
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from . import analytics, ask, assist, audio, calibrations, callmetrics, crittest, insights, judge, pii, sandbox, sources, translate
+from . import (analytics, ask, assist, audio, calibrations, callmetrics, crittest, doubts, insights, judge, pii, sandbox,
+               sources, translate)
 from .checklist import allowed_answers, normalize, validate
 from .db import DB
 from .judge.providers import env as read_env
@@ -123,6 +124,24 @@ class DecisionIn(BaseModel):
     decision: str
     new_answer: str | None = None
     reason: str | None = ""
+
+
+class DoubtQuestionsIn(BaseModel):
+    model_config = {"extra": "forbid"}
+    criterion_id: str
+    dataset_id: str | None = None
+    evaluation_id: int | None = Field(default=None, ge=1, strict=True)  # один спор — вопрос для карточки
+    refresh: bool = False
+    provider: str | None = None
+
+
+class DoubtResolveIn(BaseModel):
+    model_config = {"extra": "forbid"}
+    evaluation_id: int = Field(ge=1, strict=True)
+    criterion_id: str
+    answer: str
+    question: str | None = Field(default="", max_length=1000)
+    reason: str | None = Field(default="", max_length=2000)
 
 
 class CacheHeaders:
@@ -301,6 +320,7 @@ def create_app(db_path: str | os.PathLike | None = None, *, web_dir: str | os.Pa
                               "evidence": o.get("evidence") or [],
                               **{k: o[k] for k in ("votes", "agreement") if k in o}}
                              if isinstance(o, dict) else None),
+                "positions": doubts.positions(db, ev, c["id"]) if doubts.split(o) else None,
                 "final_answer": fin.get(c["id"]) if fin else (o or {}).get("answer"),
                 "appeal": appeal_short(hist[-1]) if hist else None,
                 "appeals": [appeal_short(a) for a in hist],
@@ -864,6 +884,90 @@ def create_app(db_path: str | os.PathLike | None = None, *, web_dir: str | os.Pa
         db.decide_appeal(appeal_id, "changed" if body.decision == "change" else "confirmed", new_answer, reason)
         ev = db.evaluation(a["evaluation_id"])
         return {"appeal": appeal_full(db.appeal(appeal_id), ev), "evaluation": eval_detail(ev)}
+
+    # ---------- «модель спрашивает»: спорные решения → вопросы к чек-листу ----------
+    def doubt_ids(dataset_id: str | None) -> list[str] | None:
+        if dataset_id is None:
+            return None
+        ids = db.conversation_ids(dataset_id)
+        if not ids:
+            _fail(404, f"Набор {dataset_id} не найден.")
+        return ids
+
+    @app.get("/api/doubts")
+    async def doubts_summary(dataset_id: str | None = None):
+        return doubts.summary(db, doubt_ids(dataset_id))
+
+    @app.post("/api/doubts/questions")
+    async def doubts_questions(body: DoubtQuestionsIn):
+        if body.evaluation_id is not None:
+            ev = db.evaluation(body.evaluation_id)
+            if not ev:
+                _fail(404, f"Оценка {body.evaluation_id} не найдена.")
+            one = doubts.dispute(db, ev, body.criterion_id)
+            disputes = [one] if one else []
+        else:
+            disputes = doubts.collect(db, conversation_ids=doubt_ids(body.dataset_id), criteria={body.criterion_id})
+        if not disputes:
+            _fail(422, "Оценки модели по этому критерию не расходятся — спрашивать не о чем.")
+        disputes, cl_id = doubts.scope(disputes)
+        cl = checklist(cl_id)
+        if not cl:
+            _fail(422, f"Чек-лист {cl_id} не найден.")
+        brief = [{k: d[k] for k in ("conversation_id", "evaluation_id", "answer", "agreement", "votes")} for d in disputes]
+        key = doubts.cache_key(cl_id, body.criterion_id, disputes)
+        cached = None if body.refresh else db.doubt_questions(key)
+        if cached:
+            return {"key": key, "criterion_id": body.criterion_id, "checklist_id": cl_id, "disputes": brief,
+                    "questions": cached["questions"], "model": cached["model"], "cost_usd": 0.0,
+                    "latency_s": 0.0, "cached": True}
+        pid = body.provider or default_provider()
+        if pid not in visible_providers():
+            _fail(422, f"Неизвестная модель «{pid}».")
+        if not judge.available(pid):
+            _fail(422, "Модель недоступна: проверьте настройки провайдера.")
+        try:
+            result = await doubts.ask(db, cl["config"], body.criterion_id, disputes, judge.get_provider(pid))
+        except ValueError as e:
+            _fail(422, str(e))
+        except judge.ProviderError as e:
+            _fail(502, str(e))
+        db.save_doubt_questions(key, cl_id, body.criterion_id, [d["evaluation_id"] for d in disputes], result)
+        return {"key": key, "criterion_id": body.criterion_id, "checklist_id": cl_id, "disputes": brief,
+                **result, "cached": False}
+
+    @app.post("/api/doubts/resolve")
+    async def doubts_resolve(body: DoubtResolveIn):
+        """Ответ проверяющего на сомнение модели — решённая апелляция с кодом model_doubt (итог пересчитан)."""
+        ev = db.evaluation(body.evaluation_id)
+        if not ev:
+            _fail(404, f"Оценка {body.evaluation_id} не найдена.")
+        cl = checklist(ev["checklist_id"])
+        c = next((x for x in cl["config"]["criteria"] if x["id"] == body.criterion_id), None) if cl else None
+        if c is None:
+            _fail(422, f"В чек-листе этой оценки нет критерия {body.criterion_id}.")
+        if body.answer not in allowed_answers(c):
+            _fail(422, f"Ответ должен быть одним из: {', '.join(allowed_answers(c))}.")
+        appeals = db.appeals_for(ev["id"])
+        if any(a["criterion_id"] == body.criterion_id and a["reason_code"] == "model_doubt" for a in appeals):
+            _fail(409, "Сомнение модели по этому критерию уже разрешено.")
+        if db.open_appeal(ev["id"], body.criterion_id):
+            _fail(409, "По этому критерию открыта апелляция оператора — решите её в разделе «Апелляции».")
+        d = doubts.dispute(db, ev, body.criterion_id)
+        if d is None:
+            _fail(422, "Оценки модели по этому критерию не расходятся — для пересмотра есть апелляция.")
+        _, _, orig, _ = scores(ev, appeals)
+        current = final_answers(orig, appeals).get(body.criterion_id)
+        votes = " · ".join(f"{p['answer']} ×{p['count']}" for p in d["positions"])
+        question = (body.question or "").strip() or f"Оценки модели разошлись: {votes}"
+        reason = (body.reason or "").strip() or f"Проверяющий выбрал «{body.answer}» (голоса модели: {votes})."
+        a_id = db.create_appeal(ev["id"], body.criterion_id, question, "model_doubt")
+        if body.answer == current:
+            db.decide_appeal(a_id, "confirmed", None, reason)
+        else:
+            db.decide_appeal(a_id, "changed", body.answer, reason)
+        ev = db.evaluation(ev["id"])
+        return {"appeal": appeal_full(db.appeal(a_id), ev), "evaluation": eval_detail(ev)}
 
     @app.get("/api/audio/{cid}")
     async def audio_file(cid: str, request: Request):

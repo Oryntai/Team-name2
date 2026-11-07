@@ -91,6 +91,8 @@ def _approved(db, config, conversations, appeals, checklists):
 
 
 def _appeal_counts(rows):
+    # Ответ проверяющего на сомнение модели — не оспаривание оператором: в счёт апелляций не идёт.
+    rows = [a for a in rows if a.get("reason_code") != "model_doubt"]
     return {"submitted": len(rows), "decided": sum(a["status"] in DECIDED for a in rows),
             "changed": sum(a["status"] == "changed" for a in rows)}
 

@@ -201,6 +201,16 @@ class FakeProvider:
                    "warnings": warnings, "na_when_suggestion": None}
             return Reply(text=json.dumps(out, ensure_ascii=False), model="fake",
                          input_tokens=len(system) + len(user), output_tokens=200, stop="end_turn")
+        if "questions" in schema["properties"]:  # вопрос к чек-листу по спорным решениям (cqa.doubts)
+            q = schema["properties"]["questions"]["items"]["properties"]
+            answers = q["options"]["items"]["properties"]["answer"]["enum"]
+            out = {"questions": [{
+                "question": "Тестовый вопрос заглушки: какое прочтение критерия считать верным?",
+                "conversation_ids": q["conversation_ids"]["items"]["enum"], "existing_rule": None,
+                "options": [{"answer": a, "label": f"{a} — тестовое прочтение",
+                             "rule": f"Тестовое правило заглушки: в такой ситуации ставить «{a}»."} for a in answers[:3]]}]}
+            return Reply(text=json.dumps(out, ensure_ascii=False), model="fake",
+                         input_tokens=len(system) + len(user), output_tokens=200, stop="end_turn")
         crit = schema["properties"]["criteria"]["properties"]
         out = {cid: {"explanation": f"Тестовый ответ заглушки по критерию {cid} [1].",
                      "answer": spec["properties"]["answer"]["enum"][0], "evidence": [1]} for cid, spec in crit.items()}

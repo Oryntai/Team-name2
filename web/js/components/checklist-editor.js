@@ -5,7 +5,7 @@ import { enhance } from '../dropdown.js';
 import { toggleAskDisclosure } from './ask.js';
 import {
   esc, icon, fmtDateTime, fmtInt, fmtPts, fmtMoney, fmtClock, toast, debounce, clone, emit, pollRun, isRunFinished,
-  plural, TYPE_LABEL, secondsBetween, PROVIDER_DESC } from '../util.js';
+  plural, TYPE_LABEL, secondsBetween, PROVIDER_DESC, answerTone } from '../util.js';
 
 const FIELDS = ['section', 'title', 'type', 'weight', 'na', 'yes', 'no', 'na_when', 'steps', 'guidance'];
 const FIELD_LABEL = { section: 'секция', title: 'название', type: 'тип', weight: 'вес', na: 'N/A', yes: '«Да»', no: '«Нет»', na_when: 'условие N/A', steps: 'шкала', guidance: 'пояснение' };
@@ -47,6 +47,8 @@ class ChecklistEditor extends CqaElement {
       validation: null, validating: false, note: '', meta: null, datasets: [], applyDataset: null, applyProvider: null, run: null, justSaved: null,
       assists: new Map(), folds: new Set(),
       full: false, plan: null, planError: null, diff: null, trial: {}, approved: {}, approvedLimit: 12,
+      // «Вопросы к чек-листу»: где оценки модели разошлись — сводка по набору, вопросы по критериям, «было → стало»
+      doubts: null, doubtsError: null, doubtQs: new Map(), doubtsBaseline: null,
     };
     this.validateSoon = debounce(() => this.validate(), 350);
     this.innerHTML = '<div class="cqa-loading"><span class="cqa-spinner cqa-spinner--lg"></span>Загружаю чек-листы…</div>';
@@ -92,6 +94,7 @@ class ChecklistEditor extends CqaElement {
     this.s.folds = new Set();
     this.render();
     this.loadPlan();
+    this.loadDoubts();
     if (history.replaceState) history.replaceState(null, '', `#/checklist?id=${encodeURIComponent(loaded.id)}`);
   }
 
@@ -151,6 +154,7 @@ class ChecklistEditor extends CqaElement {
     const headChanged = (f) => (ref && !same(String(d[f] ?? '').trim(), String(ref[f] ?? '').trim()) ? 'is-changed' : '');
     return `
       <div data-part="apply">${this.applyHtml()}</div>
+      <div data-part="doubts" aria-live="polite">${this.doubtsHtml()}</div>
       ${this.foldHtml('settings', 'Настройки чек-листа', `<div class="cqa-editor-head">
         <label class="cqa-field ${headChanged('name')}" data-wrap="name"><span class="cqa-label">Название чек-листа</span><input class="cqa-input" data-path="name" value="${esc(d.name)}"></label>
         <label class="cqa-field ${headChanged('description')}" data-wrap="description"><span class="cqa-label">Описание</span><input class="cqa-input" data-path="description" value="${esc(d.description || '')}"></label>
@@ -610,12 +614,133 @@ class ChecklistEditor extends CqaElement {
             this.refreshChrome();
           });
           this.loadPlan();
+          this.s.doubtQs = new Map();
+          this.loadDoubts();
           toast(`Чек-лист v${this.s.loaded.version} применён: ${fmtInt(run.done)} ${plural(run.done, 'оценка', 'оценки', 'оценок')} · ${fmtMoney(run.cost_usd || 0)}`, 'info', 6000);
           emit('cqa-data-changed', { run: run.id });
         }
       });
       this.onCleanup(() => this.stopPoll?.());
     } catch (e) { toast(`Не удалось запустить: ${e.message}`, 'error', 7000); }
+  }
+
+
+  /* ---------- вопросы к чек-листу: где три оценки модели разошлись ---------- */
+  async loadDoubts() {
+    const seq = this.doubtsSeq = (this.doubtsSeq || 0) + 1;
+    this.s.doubtsError = null;
+    if (!this.s.applyDataset) { this.s.doubts = null; this.refreshDoubts(); return; }
+    try {
+      const d = await this.api.doubts(this.s.applyDataset);
+      if (!this.alive || seq !== this.doubtsSeq) return;
+      this.s.doubts = d;
+      for (const c of d.criteria) {
+        if (c.questions && !this.s.doubtQs.get(c.id)?.result) this.s.doubtQs.set(c.id, { result: { questions: c.questions, cached: true } });
+      }
+    } catch (e) {
+      if (!this.alive || seq !== this.doubtsSeq) return;
+      this.s.doubtsError = e.message;
+    }
+    this.refreshDoubts();
+  }
+
+  refreshDoubts() { const el = this.part('doubts'); if (el) el.innerHTML = this.doubtsHtml(); }
+
+  doubtsHtml() {
+    if (this.s.doubtsError) return `<div class="cqa-error-box">Вопросы к чек-листу недоступны: ${esc(this.s.doubtsError)}</div>`;
+    const d = this.s.doubts;
+    if (!d || !d.dialogs) return '';
+    const base = this.s.doubtsBaseline;
+    const title = (id) => (this.s.draft.criteria || []).find((x) => x.id === id)?.title || id;
+    const gone = base ? Object.keys(base).filter((id) => base[id] && !d.criteria.some((c) => c.id === id)) : [];
+    const pct = d.decisions ? (Math.round((d.disputed / d.decisions) * 1000) / 10).toString().replace('.', ',') : '0';
+    return `<div class="cqa-panel cqa-panel-pad cqa-doubts">
+      <div class="cqa-row"><h3 class="cqa-doubts-title">${icon('help')}Вопросы к чек-листу</h3><span class="cqa-faint">набор ${esc(this.s.applyDataset)} · там, где три оценки модели разошлись</span></div>
+      <p class="cqa-muted">${d.disputed
+        ? `Оценки разошлись в <b>${fmtInt(d.disputed)}</b> ${plural(d.disputed, 'решении', 'решениях', 'решениях')} из ${fmtInt(d.decisions)} (${pct}%). Модель превращает спор в вопрос к формулировке — ваш ответ станет правилом в пояснении критерия.`
+        : `Во всех ${fmtInt(d.decisions)} решениях оценки модели совпали — формулировки читаются однозначно.`}</p>
+      ${d.checklist_id != null && String(d.checklist_id) !== String(this.s.loaded?.id)
+        ? `<p class="cqa-faint">Оценки набора — по версии ${esc(this.s.list.find((x) => String(x.id) === String(d.checklist_id))?.version ?? d.checklist_id)}. Примените эту версию, чтобы увидеть споры по ней.</p>`
+        : d.checklist_ids.length > 1 ? '<p class="cqa-faint">В наборе есть оценки по разным версиям чек-листа — вопрос строится по самой новой.</p>' : ''}
+      ${this.doubtsCalmHtml(d)}
+      ${d.criteria.map((c) => this.doubtRowHtml(c, base)).join('')}
+      ${gone.map((id) => `<div class="cqa-doubt-row"><div class="cqa-row"><span class="cqa-crit-id">${esc(id)}</span><b>${esc(title(id))}</b>
+        <span class="cqa-badge cqa-badge--mint">${icon('check')}было ${fmtInt(base[id])} → стало 0: оценки сошлись</span></div></div>`).join('')}
+    </div>`;
+  }
+
+  /** Критерий изменён в этой версии (против родительской). */
+  versionChanged(id) {
+    const cur = (this.s.loaded?.config?.criteria || []).find((x) => x.id === id);
+    const old = (this.s.parent?.config?.criteria || []).find((x) => x.id === id);
+    return !!cur && !!this.s.parent && (!old || FIELDS.some((f) => !same(normField(cur, f), normField(old, f))));
+  }
+
+  /** Где оценки совпали: изменённый в этой версии критерий без споров — формулировка читается однозначно. */
+  doubtsCalmHtml(d) {
+    const all = (d.all || []).filter((c) => c.decisions);
+    const applied = String(d.checklist_id) === String(this.s.loaded?.id);
+    const fresh = applied ? all.filter((c) => !c.disputed && this.versionChanged(c.id)) : [];
+    const calm = all.filter((c) => !c.disputed && !fresh.includes(c));
+    return `${fresh.map((c) => `<p class="cqa-doubt-fresh">${icon('check')}<span><b>${esc(c.id)} · ${esc(c.title)}</b> — изменён в этой версии: оценки модели совпали во всех ${fmtInt(c.decisions)} ${plural(c.decisions, 'диалоге', 'диалогах', 'диалогах')}, формулировка читается однозначно.</span></p>`).join('')}
+      ${calm.length ? `<p class="cqa-faint">Без споров: ${calm.map((c) => esc(c.id)).join(' · ')}</p>` : ''}`;
+  }
+
+  doubtRowHtml(c, base) {
+    const st = this.s.doubtQs.get(c.id) || {};
+    const qs = st.result?.questions || [];
+    const def = (this.s.draft.criteria || []).find((x) => x.id === c.id);
+    const was = base?.[c.id];
+    const delta = was != null && was !== c.disputed
+      ? `<span class="cqa-badge ${c.disputed < was ? 'cqa-badge--mint' : 'cqa-badge--warn'}">было ${fmtInt(was)} → стало ${fmtInt(c.disputed)}</span>` : '';
+    return `<div class="cqa-doubt-row">
+      <div class="cqa-row"><span class="cqa-crit-id">${esc(c.id)}</span><b>${esc(c.title)}</b>
+        <span class="cqa-muted">разошлись в ${fmtInt(c.disputed)} ${plural(c.disputed, 'диалоге', 'диалогах', 'диалогах')}</span>${delta}<span class="cqa-spacer"></span>
+        <button type="button" class="cqa-btn cqa-btn--sm ${qs.length ? 'cqa-btn--ghost' : ''}" data-act="doubt-ask" data-crit="${esc(c.id)}" ${st.loading ? 'disabled' : ''}>${st.loading ? '<span class="cqa-spinner"></span>Формулирую…' : qs.length ? 'Спросить заново' : `${icon('help')}Сформулировать вопрос`}</button></div>
+      ${st.error ? `<div class="cqa-error-box">${esc(st.error)}</div>` : ''}
+      ${qs.map((q, qi) => `<div class="cqa-doubt cqa-doubt--row">
+        <p class="cqa-doubt-q">${esc(q.question)}</p>
+        <p class="cqa-faint">Диалоги: ${q.conversation_ids.map((id) => `<a href="#/c/${encodeURIComponent(id)}">${esc(id)}</a>`).join(', ')}</p>
+        ${q.existing_rule ? `<p class="cqa-doubt-rule">${icon('checklist')}<span>В чек-листе уже есть: «${esc(q.existing_rule)}» — оценки понимают это по-разному.</span></p>` : ''}
+        <div class="cqa-doubt-opts">${q.options.map((o, oi) => `<div class="cqa-doubt-opt">
+          <div class="cqa-doubt-opt-head"><span class="cqa-answer cqa-answer--sm" data-tone="${def ? answerTone(def, o.answer) : 'na'}">${esc(o.answer)}</span><b>${esc(o.label)}</b>
+            <button type="button" class="cqa-btn cqa-btn--xs" data-act="doubt-rule" data-crit="${esc(c.id)}" data-q="${qi}" data-o="${oi}" ${def ? '' : 'disabled title="Этого критерия нет в черновике"'}>${icon('plus')}В пояснение</button></div>
+          <p class="cqa-doubt-arg">Правило: «${esc(o.rule)}»</p></div>`).join('')}</div>
+      </div>`).join('')}
+    </div>`;
+  }
+
+  async askDoubt(cid) {
+    const prev = this.s.doubtQs.get(cid) || {};
+    this.s.doubtQs.set(cid, { ...prev, loading: true, error: null });
+    this.refreshDoubts();
+    try {
+      const result = await this.api.doubtQuestions({ criterion_id: cid, dataset_id: this.s.applyDataset, refresh: !!prev.result });
+      if (!this.alive) return;
+      this.s.doubtQs.set(cid, { result });
+      if (!result.cached) toast(`Вопрос к ${cid} готов · ${fmtMoney(result.cost_usd || 0)}`, 'info', 4000);
+    } catch (e) {
+      if (!this.alive) return;
+      this.s.doubtQs.set(cid, { ...prev, loading: false, error: e.message });
+    }
+    this.refreshDoubts();
+  }
+
+  /** Вариант ответа → фраза в пояснение критерия черновика; дальше — обычные «Сохранить» и «Применить». */
+  addDoubtRule(cid, qi, oi) {
+    const o = this.s.doubtQs.get(cid)?.result?.questions?.[qi]?.options?.[oi];
+    const c = (this.s.draft.criteria || []).find((x) => x.id === cid);
+    if (!o || !c) return;
+    const rule = o.rule.trim();
+    if ((c.guidance || '').includes(rule)) { toast('Это правило уже есть в пояснении', 'warn'); return; }
+    c.guidance = `${(c.guidance || '').trim()} ${rule}`.trim();
+    if (!this.s.doubtsBaseline) this.s.doubtsBaseline = Object.fromEntries((this.s.doubts?.criteria || []).map((x) => [x.id, x.disputed]));
+    this.s.open = new Set([cid]);
+    this.s.folds.add(`guidance-${cid}`);
+    if (!this.s.note) this.s.note = `Правило к ${cid} — ответ на вопрос модели`;
+    this.changed(true);
+    toast(`Правило добавлено в пояснение ${cid}. Сохраните версию и примените — проверим, сойдутся ли оценки`, 'info', 7000);
+    requestAnimationFrame(() => this.querySelector(`.cqa-ec[data-crit="${CSS.escape(cid)}"]`)?.scrollIntoView({ block: 'center', behavior: 'smooth' }));
   }
 
   /* ---------- события ---------- */
@@ -629,6 +754,8 @@ class ChecklistEditor extends CqaElement {
     const cs = this.s.draft.criteria;
     const i = actEl.dataset.i != null ? +actEl.dataset.i : null;
     if (act === 'assist') { this.requestAssist(i); return; }
+    if (act === 'doubt-ask') { this.askDoubt(actEl.dataset.crit); return; }
+    if (act === 'doubt-rule') { this.addDoubtRule(actEl.dataset.crit, +actEl.dataset.q, +actEl.dataset.o); return; }
     if (act === 'assist-close') { this.s.assists.delete(cs[i].id); this.refreshAssist(cs[i]); return; }
     if (act === 'assist-guidance' || act === 'assist-na') {
       const r = this.s.assists.get(cs[i].id)?.result;
@@ -713,7 +840,11 @@ class ChecklistEditor extends CqaElement {
     }
     if (t.dataset.f?.startsWith('apply-')) {
       if (!isChange) return;
-      if (t.dataset.f === 'apply-dataset') this.s.applyDataset = t.value;
+      if (t.dataset.f === 'apply-dataset') {
+        this.s.applyDataset = t.value;
+        Object.assign(this.s, { doubts: null, doubtQs: new Map(), doubtsBaseline: null });
+        this.loadDoubts();
+      }
       if (t.dataset.f === 'apply-provider') this.s.applyProvider = t.value;
       if (t.dataset.f === 'apply-full') this.s.full = t.checked;
       this.loadPlan(); return;
