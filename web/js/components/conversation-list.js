@@ -144,7 +144,7 @@ class ConversationList extends CqaElement {
       </div>
       </div>
       <div class="cqa-runbar">
-        <div class="cqa-runbar-text">${icon('spark')}<div><b>Оценка оператора</b><span>Каждый диалог — живой вызов модели; итог считает код по формуле чек-листа.</span></div></div>
+        <div class="cqa-runbar-text">${icon('spark')}<div><b>Оценка оператора</b><span>Модель оценивает изменённые критерии; итог считает код по формуле чек-листа.</span></div></div>
         <label class="cqa-field"><span class="cqa-label">Чек-лист</span>
           <select class="cqa-select cqa-select--sm" data-f="checklist" ${busy ? 'disabled' : ''}>
             ${[...checklists].sort((a, b) => b.id - a.id).map((c) => `<option value="${c.id}" ${c.id === this.s.checklistId ? 'selected' : ''}>${esc(checklistLabel(c))}</option>`).join('') || '<option value="">нет чек-листов</option>'}

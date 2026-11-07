@@ -73,6 +73,17 @@ class DB:
         with self.lock:
             self.conn.execute("PRAGMA journal_mode=WAL")
             self.conn.executescript(SCHEMA)
+            additions = {
+                "runs": {"mode": "TEXT DEFAULT 'full'"},
+                "run_items": {"previous_evaluation_id": "INTEGER"},
+                "evaluations": {"mode": "TEXT DEFAULT 'full'", "evaluated": "TEXT DEFAULT '[]'",
+                                "reused": "TEXT DEFAULT '[]'", "model_calls": "INTEGER DEFAULT 0"},
+            }
+            for table, columns in additions.items():
+                existing = {r[1] for r in self.conn.execute(f"PRAGMA table_info({table})")}
+                for name, definition in columns.items():
+                    if name not in existing:
+                        self.conn.execute(f"ALTER TABLE {table} ADD COLUMN {name} {definition}")
             self.conn.commit()
 
     def close(self) -> None:
@@ -197,21 +208,24 @@ class DB:
         return cl_id
 
     # --- прогоны ---
-    def create_run(self, checklist_id: int, provider: str, model: str, conversation_ids: list[str]) -> int:
+    def create_run(self, checklist_id: int, provider: str, model: str, conversation_ids: list[str],
+                   mode: str = "full") -> int:
         with self.lock, self.conn:
             cur = self.conn.execute(
-                "INSERT INTO runs(created_at, status, checklist_id, provider, model, total, done, failed, cost_usd) "
-                "VALUES(?,?,?,?,?,?,0,0,0)", (now(), "running", checklist_id, provider, model, len(conversation_ids)))
+                "INSERT INTO runs(created_at, status, checklist_id, provider, model, total, done, failed, cost_usd, mode) "
+                "VALUES(?,?,?,?,?,?,0,0,0,?)", (now(), "running", checklist_id, provider, model, len(conversation_ids), mode))
             run_id = cur.lastrowid
-            self.conn.executemany("INSERT INTO run_items(run_id, pos, conversation_id, status) VALUES(?,?,?,?)",
-                                  [(run_id, i, cid, "pending") for i, cid in enumerate(conversation_ids)])
+            self.conn.executemany("INSERT INTO run_items(run_id, pos, conversation_id, status, previous_evaluation_id) "
+                                  "VALUES(?,?,?,?,?)",
+                                  [(run_id, i, cid, "pending", (self.latest_success(cid, model) or {}).get("id"))
+                                   for i, cid in enumerate(conversation_ids)])
             return run_id
 
     def run(self, run_id: int) -> dict | None:
         return self.one("SELECT * FROM runs WHERE id=?", (run_id,))
 
     def run_items(self, run_id: int) -> list[dict]:
-        return self.q("SELECT i.conversation_id, i.status, i.evaluation_id, i.error, e.total, e.gross "
+        return self.q("SELECT i.conversation_id, i.status, i.evaluation_id, i.previous_evaluation_id, i.error, e.total, e.gross "
                       "FROM run_items i LEFT JOIN evaluations e ON e.id=i.evaluation_id WHERE i.run_id=? ORDER BY i.pos",
                       (run_id,))
 
@@ -225,6 +239,12 @@ class DB:
         return self.one("SELECT COUNT(id) AS n_evals, AVG(cost_usd) AS avg_cost_per_eval, AVG(latency_s) AS avg_latency_s, "
                         "COALESCE(SUM(input_tokens), 0) AS tokens_in, COALESCE(SUM(output_tokens), 0) AS tokens_out "
                         "FROM evaluations WHERE run_id=? AND status='ok'", (run_id,))
+
+    def run_counts(self, run_id: int) -> dict:
+        rows = self.q("SELECT model_calls, evaluated, reused FROM evaluations WHERE run_id=?", (run_id,))
+        return {"model_calls": sum(r["model_calls"] or 0 for r in rows),
+                "evaluated": sum(len(_json(r["evaluated"], [])) for r in rows),
+                "reused": sum(len(_json(r["reused"], [])) for r in rows)}
 
     def set_item(self, run_id: int, cid: str, status: str, evaluation_id: int | None = None, error: str | None = None):
         self.ex("UPDATE run_items SET status=?, evaluation_id=COALESCE(?, evaluation_id), error=? "
@@ -252,21 +272,29 @@ class DB:
     def insert_evaluation(self, ev: dict) -> int:
         return self.ex(
             "INSERT INTO evaluations(run_id, conversation_id, checklist_id, created_at, provider, model, prompt_version, "
-            "status, error, latency_s, input_tokens, output_tokens, cost_usd, answers, pii_masked, raw, total, gross) "
-            "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            "status, error, latency_s, input_tokens, output_tokens, cost_usd, answers, pii_masked, raw, total, gross, "
+            "mode, evaluated, reused, model_calls) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
             (ev.get("run_id"), ev["conversation_id"], ev["checklist_id"], ev.get("created_at") or now(), ev.get("provider"),
              ev.get("model"), ev.get("prompt_version"), ev.get("status"), ev.get("error"), ev.get("latency_s"),
              ev.get("input_tokens"), ev.get("output_tokens"), ev.get("cost_usd"),
              json.dumps(ev.get("answers") or {}, ensure_ascii=False),
              json.dumps(ev.get("pii_masked") or [], ensure_ascii=False), ev.get("raw"), ev.get("total"),
-             None if ev.get("gross") is None else int(bool(ev.get("gross")))))
+             None if ev.get("gross") is None else int(bool(ev.get("gross"))), ev.get("mode", "full"),
+             json.dumps(ev.get("evaluated", [])), json.dumps(ev.get("reused", [])), ev.get("model_calls", 0)))
 
     def evaluation(self, ev_id: int) -> dict | None:
         r = self.one("SELECT * FROM evaluations WHERE id=?", (ev_id,))
         if r:
             r["answers"] = _json(r["answers"], {})
             r["pii_masked"] = _json(r["pii_masked"], [])
+            r["evaluated"] = _json(r["evaluated"], [])
+            r["reused"] = _json(r["reused"], [])
         return r
+
+    def latest_success(self, cid: str, model: str) -> dict | None:
+        row = self.one("SELECT id FROM evaluations WHERE conversation_id=? AND model=? AND status='ok' "
+                       "ORDER BY id DESC LIMIT 1", (cid, model))
+        return self.evaluation(row["id"]) if row else None
 
     def evaluations_for(self, cid: str) -> list[dict]:
         rows = self.q("SELECT * FROM evaluations WHERE conversation_id=? ORDER BY id DESC", (cid,))

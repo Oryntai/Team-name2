@@ -41,14 +41,26 @@ def _evidence(raw, n_replies: int) -> list[int]:
     return sorted(out)
 
 
-async def evaluate(record: dict, config: dict, provider, *, mask_pii: bool = True) -> dict:
+async def evaluate(record: dict, config: dict, provider, *, only=None, mask_pii: bool = True) -> dict:
+    from ..incremental import fingerprints
+
     pid = provider.pid
+    ids = {c["id"] for c in config["criteria"]} if only is None else set(only)
+    unknown = ids - {c["id"] for c in config["criteria"]}
+    if unknown:
+        raise ValueError("Неизвестные критерии: " + ", ".join(sorted(unknown)))
+    selected = [c for c in config["criteria"] if c["id"] in ids]
     tr = record["transcript"]
     masked, pii = mask_transcript(tr) if mask_pii else (tr, [])
-    system, user, schema = build_system(config), build_user(record, masked), build_schema(config)
+    system, user = build_system(config), build_user(record, masked)
+    schema = build_schema({**config, "criteria": selected})
+    if only is not None and len(selected) < len(config["criteria"]):  # все критерии — ровно прежний промпт
+        user += "\n\nОцени только критерии: " + ", ".join(c["id"] for c in selected) + ". Остальные не оценивай"
     base = {"provider": pid, "model": model_name(pid), "prompt_version": PROMPT_VERSION, "pii_masked": pii,
             "input_tokens": 0, "output_tokens": 0, "cost_usd": 0.0, "answers": {}, "raw": ""}
     t0 = time.monotonic()
+    if not selected:
+        return {**base, "status": "ok", "error": None, "latency_s": 0.0}
     try:
         reply = await provider.complete(system, user, schema)
     except ProviderError as e:
@@ -64,7 +76,8 @@ async def evaluate(record: dict, config: dict, provider, *, mask_pii: bool = Tru
     if not isinstance(crit, dict):
         return {**out, "status": "error", "error": "Модель вернула ответ не в формате JSON чек-листа."}
     answers, problems = {}, []
-    for c in config["criteria"]:
+    hashes = fingerprints(config, out["model"])
+    for c in selected:
         item = crit.get(c["id"])
         if not isinstance(item, dict):
             problems.append(f"{c['id']}: нет ответа")
@@ -74,7 +87,8 @@ async def evaluate(record: dict, config: dict, provider, *, mask_pii: bool = Tru
             problems.append(f"{c['id']}: недопустимый ответ {item.get('answer')!r}")
             continue
         answers[c["id"]] = {"answer": a, "explanation": str(item.get("explanation") or "").strip(),
-                            "evidence": _evidence(item.get("evidence"), len(tr))}
+                            "evidence": _evidence(item.get("evidence"), len(tr)),
+                            "fingerprint": hashes[c["id"]], "reused_from": None}
     if problems:
         return {**out, "answers": answers, "status": "error", "error": "Ответ модели неполный: " + "; ".join(problems)}
     return {**out, "answers": answers, "status": "ok", "error": None}

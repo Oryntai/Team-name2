@@ -62,6 +62,8 @@ function httpClient(base) {
     conversation: (id) => req('GET', `/conversations/${enc(id)}`),
     evaluation: (id) => req('GET', `/evaluations/${enc(id)}`),
     startRun: (body) => req('POST', '/runs', body),
+    planRun: (body) => req('POST', '/runs/plan', body),
+    runDiff: (id) => req('GET', `/runs/${enc(id)}/diff`),
     run: (id) => req('GET', `/runs/${enc(id)}`),
     runs: () => req('GET', '/runs'),
     checklists: () => req('GET', '/checklists'),

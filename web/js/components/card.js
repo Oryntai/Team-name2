@@ -177,7 +177,7 @@ class Card extends CqaElement {
         <button type="button" class="cqa-btn cqa-btn--primary" data-act="rerun-start" ${run && !isRunFinished(run) ? 'disabled' : ''}>${icon('play')}${ev ? 'Оценить заново' : 'Оценить диалог'}</button>
         <span data-part="rerun-status">${status}</span>
       </div>
-      ${inline ? '' : '<div class="cqa-faint" style="font-size:12px;margin-top:8px">Каждая оценка — новый живой вызов модели; прежние оценки сохраняются и доступны в списке «Оценка».</div>'}
+      ${inline ? '' : '<div class="cqa-faint" style="font-size:12px;margin-top:8px">Модель оценит изменённые определения; остальные ответы перенесём. Прежние оценки доступны в списке «Оценка».</div>'}
     </div>`;
   }
 
@@ -313,6 +313,7 @@ class Card extends CqaElement {
         ${points}
       </div>
       ${step}
+      ${c.reused_from != null ? `<p class="cqa-faint">Перенесено из оценки №${esc(c.reused_from)}: определение не менялось.</p>` : ''}
       ${orig.explanation ? `<p class="cqa-crit-expl">${linkifyRefs(orig.explanation, n)}</p>` : ''}
       ${evHtml}
       ${this.appealHtml(c, crit)}
