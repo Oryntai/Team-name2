@@ -35,7 +35,7 @@ function httpClient(base) {
     }
     let r;
     try { r = await fetch(root + path, opts); } catch {
-      throw new ApiError(0, null, 'Сервер CQA недоступен. Запустите его: uv run python -m cqa');
+      throw new ApiError(0, null, 'Сервер недоступен. Запустите его: uv run python -m cqa');
     }
     const text = await r.text();
     let data = null;

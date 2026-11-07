@@ -35,9 +35,9 @@ class CqaApp extends CqaElement {
     document.documentElement.dataset.cqaRole = getRole();
     this.innerHTML = `
       <header class="cqa-header"><div class="cqa-header-in">
-        <a class="cqa-brand" href="#/" aria-label="CQA — на главную">
+        <a class="cqa-brand" href="#/" aria-label="Название оценки — на главную">
           <span class="cqa-brand-mark">${icon('logo')}</span>
-          <span class="cqa-brand-text"><span class="cqa-brand-title">CQA</span><span class="cqa-brand-sub">Контроль качества диалогов</span></span>
+          <span class="cqa-brand-text"><span class="cqa-brand-title">Название оценки</span><span class="cqa-brand-sub">Контроль качества диалогов</span></span>
         </a>
         <nav class="cqa-nav" aria-label="Разделы">
           ${NAV.map((n) => `<a href="${n.href}" data-nav="${n.key}">${icon(n.icon)}<span class="cqa-nav-text">${n.label}</span>${n.key === 'appeals' ? '<span class="cqa-nav-count cqa-hidden" data-part="appeals-count"></span>' : ''}</a>`).join('')}
@@ -119,7 +119,7 @@ class CqaApp extends CqaElement {
     const main = this.part('main');
     main.replaceChildren(el);
     window.scrollTo(0, 0);
-    document.title = `${{ list: 'Диалоги', appeals: 'Апелляции', analytics: 'Аналитика', checklist: 'Чек-лист', journal: 'Журнал', ask: 'Спросить' }[nav]}${head === 'c' && id ? ` · ${id}` : ''} — CQA`;
+    document.title = `${{ list: 'Диалоги', appeals: 'Апелляции', analytics: 'Аналитика', checklist: 'Чек-лист', journal: 'Журнал', ask: 'Спросить' }[nav]}${head === 'c' && id ? ` · ${id}` : ''} — Название оценки`;
   }
 }
 

@@ -348,7 +348,7 @@ class ChecklistEditor extends CqaElement {
   async checkApproved() {
     if (this.s.approved.busy) return;
     if (this.api.mock) {
-      this.s.approved = { error: 'Сверка доступна при запуске сервера CQA.' };
+      this.s.approved = { error: 'Сверка доступна, когда запущен сервер.' };
       this.refreshChrome(); return;
     }
     if (!Number.isInteger(this.s.approvedLimit) || this.s.approvedLimit < 1 || this.s.approvedLimit > 100) {

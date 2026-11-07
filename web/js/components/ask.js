@@ -82,7 +82,7 @@ class Ask extends CqaElement {
     if (this.busy) return;
     const question = this.part('question').value.trim();
     if (!question) { this.part('question').focus(); return; }
-    if (this.api.mock) { toast('Для вопросов нужен сервер CQA.', 'info'); return; }
+    if (this.api.mock) { toast('Для вопросов нужен сервер.', 'info'); return; }
     const body = { question };
     const dataset = this.part('dataset') ? this.part('dataset').value : this.getAttribute('dataset-id');
     const checklist = this.part('checklist') ? this.part('checklist').value : this.getAttribute('checklist-id');
