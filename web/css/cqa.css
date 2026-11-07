@@ -776,3 +776,28 @@ cqa-card { container-type: inline-size; container-name: cqa-card; }
 @keyframes cqa-pop-in { from { opacity: 0; transform: scale(.97) translateY(-4px); } }
 @keyframes cqa-pop-out { to { opacity: 0; transform: scale(.97) translateY(-4px); } }
 @media (prefers-reduced-motion: reduce) { .cqa-pop, .cqa-pop.is-closing { animation: none; } }
+
+/* Разбор: белая поверхность, подробности по клику. */
+.cqa-insight { padding: 14px 4px; background: #fff; }
+.cqa-insight h2 { margin: 0; font-size: 16px; }
+.cqa-insight p, .cqa-coaching p { margin: 7px 0; }
+.cqa-insight-summary { display: flex; align-items: flex-start; gap: 10px; width: 100%; padding: 8px 0;
+  border: 0; box-shadow: none; background: none; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.cqa-insight-summary > span { flex: 1; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
+.cqa-insight-summary > .cqa-icon { flex: none; margin-top: 3px; transition: transform .144s ease-out; }
+.cqa-insight.is-expanded .cqa-insight-summary > span { display: block; }
+.cqa-insight.is-expanded .cqa-insight-summary > .cqa-icon { transform: rotate(180deg); transition-duration: .18s; }
+.cqa-insight-meta { font-size: 12px; gap: 6px 12px; }
+.cqa-insight-flags { gap: 5px; margin-top: 8px; }
+.cqa-insight-flag { display: inline-flex; align-items: center; gap: 5px; padding: 3px 7px; border-radius: 5px;
+  font-size: 11px; background: var(--cqa-mint-50); color: var(--cqa-green-800); }
+.cqa-insight-detail { display: grid; grid-template-rows: 0fr; opacity: 0; visibility: hidden;
+  transition: grid-template-rows .144s ease-out, opacity .144s ease-out, visibility 0s linear .144s; }
+.cqa-insight-detail > div { overflow: hidden; min-height: 0; font-size: 12px; }
+.cqa-insight.is-expanded .cqa-insight-detail { grid-template-rows: 1fr; opacity: 1; visibility: visible;
+  transition: grid-template-rows .18s ease-out, opacity .18s ease-out, visibility 0s; }
+.cqa-coaching { padding-top: 6px; font-size: 13px; }
+.cqa-insight-topic { color: var(--cqa-green-700); max-width: 240px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+@media (prefers-reduced-motion: reduce) {
+  .cqa-insight-detail, .cqa-insight.is-expanded .cqa-insight-detail, .cqa-insight-summary > .cqa-icon { transition: none; }
+}

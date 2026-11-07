@@ -39,6 +39,11 @@ CREATE TABLE IF NOT EXISTS evaluations(
   output_tokens INTEGER, cost_usd REAL, answers TEXT, pii_masked TEXT, raw TEXT, total REAL, gross INTEGER);
 CREATE INDEX IF NOT EXISTS evaluations_conv ON evaluations(conversation_id);
 CREATE INDEX IF NOT EXISTS evaluations_run ON evaluations(run_id);
+CREATE TABLE IF NOT EXISTS insights(
+  id INTEGER PRIMARY KEY AUTOINCREMENT, conversation_id TEXT NOT NULL, evaluation_id INTEGER NOT NULL,
+  created_at TEXT NOT NULL, provider TEXT, model TEXT, cost_usd REAL DEFAULT 0,
+  input_tokens INTEGER DEFAULT 0, output_tokens INTEGER DEFAULT 0, data TEXT NOT NULL);
+CREATE INDEX IF NOT EXISTS insights_conv ON insights(conversation_id, id);
 CREATE TABLE IF NOT EXISTS appeals(
   id INTEGER PRIMARY KEY AUTOINCREMENT, evaluation_id INTEGER, criterion_id TEXT, comment TEXT, created_at TEXT,
   status TEXT, new_answer TEXT, reason TEXT, decided_at TEXT);
@@ -350,6 +355,37 @@ class DB:
             r["answers"] = _json(r["answers"], {})
             out[r["conversation_id"]] = r
         return out
+
+    # --- разговорный разбор (оценки не меняет) ---
+    def insert_insight(self, cid: str, evaluation_id: int, provider: str, model: str) -> int:
+        return self.ex("INSERT INTO insights(conversation_id, evaluation_id, created_at, provider, model, data) "
+                       "VALUES(?,?,?,?,?,?)", (cid, evaluation_id, now(), provider, model,
+                                              json.dumps({"status": "pending"})))
+
+    def update_insight(self, iid: int, result: dict) -> None:
+        fields = [k for k in ("model", "cost_usd", "input_tokens", "output_tokens", "data") if k in result]
+        values = [json.dumps(result[k], ensure_ascii=False) if k == "data" else result[k] for k in fields]
+        self.ex("UPDATE insights SET " + ", ".join(k + "=?" for k in fields) + " WHERE id=?", (*values, iid))
+
+    def latest_insight(self, cid: str) -> dict | None:
+        row = self.one("SELECT * FROM insights WHERE conversation_id=? ORDER BY id DESC LIMIT 1", (cid,))
+        if row:
+            row["data"] = _json(row["data"], {})
+        return row
+
+    def list_insights(self, dataset_id: str | None = None) -> list[dict]:
+        sql = ("SELECT i.* FROM insights i JOIN (SELECT conversation_id, MAX(id) id FROM insights "
+               "GROUP BY conversation_id) m ON m.id=i.id JOIN conversations c ON c.id=i.conversation_id")
+        rows = self.q(sql + (" WHERE c.dataset_id=?" if dataset_id is not None else "") + " ORDER BY i.id DESC",
+                      (dataset_id,) if dataset_id is not None else ())
+        for row in rows:
+            row["data"] = _json(row["data"], {})
+        return rows
+
+    def fail_interrupted_insights(self) -> None:
+        for row in self.q("SELECT id, data FROM insights"):
+            if _json(row["data"], {}).get("status") in ("pending", "running"):
+                self.update_insight(row["id"], {"data": {"status": "error", "error": "Разбор прерван перезапуском сервера."}})
 
     # --- апелляции ---
     def create_appeal(self, evaluation_id: int, criterion_id: str, comment: str) -> int:

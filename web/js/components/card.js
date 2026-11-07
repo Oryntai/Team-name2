@@ -1,6 +1,7 @@
 // <cqa-card conversation-id="…" [evaluation-id="…"] [embedded]> — карточка диалога: транскрипт + результат оценки,
 // переход от обоснования к реплике (и к секунде записи звонка), апелляция оператора.
 import { CqaElement } from '../base.js';
+import { INSIGHT_FLAGS, SENTIMENT, insightBusy } from '../insights.js';
 import {
   esc, icon, fmtScore, fmtPts, fmtDateTime, fmtMoney, fmtSeconds, fmtInt, fmtTs, fmtClock, answerTone, answerLabel,
   evidenceLabel, scoreTone, pctTone, linkifyRefs, isCall, CHANNEL_LABEL, ROLE_LABEL, toast, getRole, providerLabel,
@@ -13,7 +14,7 @@ class Card extends CqaElement {
   init() {
     this.convId = this.getAttribute('conversation-id');
     this.evalId = this.getAttribute('evaluation-id');
-    this.s = { conv: null, ev: null, cfg: null, meta: null, checklists: [], evals: [], appealFor: null, active: null, rerunOpen: false, run: null, pop: null, thinkingTab: 0,
+    this.s = { insight: null, insightError: null, insightOpen: false, insightStarting: false, conv: null, ev: null, cfg: null, meta: null, checklists: [], evals: [], appealFor: null, active: null, rerunOpen: false, run: null, pop: null, thinkingTab: 0,
       translation: null, translationUsage: null, translationBusy: false, showTranslation: false };
     this.innerHTML = '<div class="cqa-loading"><span class="cqa-spinner cqa-spinner--lg"></span>Открываю диалог…</div>';
     this.addEventListener('click', (e) => this.onClick(e));
@@ -28,6 +29,7 @@ class Card extends CqaElement {
       if (row && (e.key === 'Enter' || e.key === ' ') && this.contains(row)) { e.preventDefault(); this.openFromRow(row.dataset.crit); }
     });
     this.listen(window, 'cqa-role', () => this.renderResults());
+    this.onCleanup(() => clearTimeout(this.insightTimer));
     this.load();
   }
 
@@ -46,6 +48,7 @@ class Card extends CqaElement {
       this.s.evals = [...(conv.evaluations || [])].sort((a, b) => String(b.created_at || '').localeCompare(String(a.created_at || '')) || (b.evaluation_id - a.evaluation_id));
       const id = this.evalId || this.s.evals[0]?.evaluation_id;
       if (id != null) await this.loadEval(id);
+      await this.loadInsight();
       if (!this.alive) return;
       this.render();
     } catch (e) {
@@ -53,6 +56,79 @@ class Card extends CqaElement {
       this.innerHTML = `<div class="cqa-card-head"><a class="cqa-back" href="#/">${icon('back')}Диалоги</a></div>
         <div class="cqa-panel cqa-panel-pad"><div class="cqa-error-box">${icon('alert')} Не удалось открыть диалог «${esc(this.convId)}»: ${esc(e.message)}</div></div>`;
     }
+  }
+
+  async loadInsight() {
+    clearTimeout(this.insightTimer);
+    if (this.api.mock) return;
+    try {
+      const row = await this.api.insight(this.convId);
+      if (!this.alive) return;
+      this.s.insight = row;
+      this.s.insightError = null;
+      if (insightBusy(row)) this.insightTimer = setTimeout(() => this.pollInsight(), 1000);
+    } catch (e) {
+      this.s.insightError = e.message;
+    }
+  }
+
+  async pollInsight() {
+    if (!this.alive) return;
+    await this.loadInsight();
+    if (!this.alive) return;
+    this.renderResults();
+    // Сетевой сбой не обрывает наблюдение за уже оплаченным запросом.
+    if (this.s.insightError && insightBusy(this.s.insight)) this.insightTimer = setTimeout(() => this.pollInsight(), 2000);
+  }
+
+  async startInsight() {
+    if (this.s.insightStarting || insightBusy(this.s.insight)) return;
+    this.s.insightStarting = true;
+    this.renderResults();
+    try {
+      await this.api.startInsights({ conversation_ids: [this.convId] });
+      await this.loadInsight();
+      if (this.s.insightError) this.insightTimer = setTimeout(() => this.pollInsight(), 1000);
+    } catch (e) { toast(e.message, 'error'); }
+    finally { this.s.insightStarting = false; if (this.alive) this.renderResults(); }
+  }
+
+  insightHtml() {
+    if (this.api.mock) return '';
+    const row = this.s.insight, d = row?.data;
+    const busy = this.s.insightStarting || insightBusy(row);
+    const hasEvaluation = this.s.evals.some((e) => e.status === 'ok');
+    const button = `<button type="button" class="cqa-btn cqa-btn--ghost cqa-btn--sm" data-act="insight-start" ${busy || !hasEvaluation ? 'disabled' : ''}>${icon('spark')}Разобрать диалог</button>`;
+    if (!row || d?.status !== 'ok') return `<section class="cqa-insight" aria-label="Разбор" aria-live="polite">
+      <div class="cqa-row"><h2>Разбор</h2>${busy ? '<span class="cqa-status"><span class="cqa-spinner"></span>Разбираю…</span>' : button}
+      ${row && !busy ? `<span class="cqa-faint">${fmtMoney(row.cost_usd)}</span>` : ''}</div>
+      ${this.s.insightError || d?.error ? `<p class="cqa-muted">${esc(this.s.insightError || d.error)}</p>` : ''}
+      ${busy ? '' : `<span class="cqa-faint">${hasEvaluation ? 'Один вызов · ≈ 0,1 цента' : 'Сначала оцените диалог'}</span>`}</section>`;
+    const stale = row.evaluation_id !== this.s.ev?.id;
+    const outdated = row.evaluation_id !== this.s.evals.find((e) => e.status === 'ok')?.evaluation_id;
+    const flags = d.flags.map((f) => `<span class="cqa-insight-flag" title="${esc(f.reason)}"><span>${esc(INSIGHT_FLAGS[f.code])}</span>
+      ${f.turns.map((n) => `<a class="cqa-ref" href="#" data-ref="${n}" aria-label="${esc(INSIGHT_FLAGS[f.code])}, реплика ${n}">#${n}</a>`).join(' ')}</span>`).join('');
+    return `<section class="cqa-insight ${this.s.insightOpen ? 'is-expanded' : ''}" aria-label="Разбор">
+      <div class="cqa-row"><h2>Разбор</h2><span class="cqa-faint">${fmtMoney(row.cost_usd)}</span>
+      ${stale ? `<span class="cqa-faint">По оценке №${row.evaluation_id}</span>` : ''}
+      ${outdated ? '<button type="button" class="cqa-btn cqa-btn--ghost cqa-btn--xs" data-act="insight-start">Обновить</button>' : ''}</div>
+      <button type="button" class="cqa-insight-summary" data-act="insight-toggle" aria-expanded="${this.s.insightOpen}" aria-controls="insight-detail">
+        <span>${esc(d.summary)}</span>${icon('down')}</button>
+      <div class="cqa-row cqa-insight-meta"><b>${esc(d.topic)}</b><span class="cqa-muted" title="Настроение клиента в начале → в конце">${esc(SENTIMENT[d.sentiment.start])} → ${esc(SENTIMENT[d.sentiment.end])}</span></div>
+      ${flags ? `<div class="cqa-row cqa-insight-flags">${flags}</div>` : ''}
+      <div class="cqa-insight-detail" id="insight-detail" ${this.s.insightOpen ? '' : 'inert'}><div>
+        <p>${esc(d.reason)}</p>
+        ${d.flags.map((f) => `<p><b>${esc(INSIGHT_FLAGS[f.code])}:</b> ${esc(f.reason)}</p>`).join('')}
+        <p class="cqa-faint">${esc(row.model)} · ${fmtInt(row.input_tokens)} / ${fmtInt(row.output_tokens)} токенов · ${esc(fmtDateTime(row.created_at))}</p>
+      </div></div></section>`;
+  }
+
+  coachingHtml(cid) {
+    const row = this.s.insight;
+    if (row?.data?.status !== 'ok' || row.evaluation_id !== this.s.ev?.id) return '';
+    const c = row.data.coaching.find((x) => x.criterion_id === cid);
+    if (!c) return '';
+    return `<div class="cqa-coaching"><p><b>Как можно было:</b> ${esc(c.rewrite)} <a href="#" class="cqa-ref" data-ref="${c.turn}">#${c.turn}</a></p><p class="cqa-muted">${esc(c.tip)}</p></div>`;
   }
 
   async loadEval(id) {
@@ -290,11 +366,11 @@ class Card extends CqaElement {
     const { ev } = this.s;
     if (!ev) {
       return `<div class="cqa-panel"><div class="cqa-empty"><div class="cqa-empty-icon">${icon('spark')}</div><h3>Диалог ещё не оценён</h3>
-        <p>Выберите чек-лист и модель — оценка займёт несколько секунд.</p></div><div style="padding:0 20px 20px">${this.rerunHtml(true)}</div></div>`;
+        <p>Выберите чек-лист и модель — оценка займёт несколько секунд.</p></div><div style="padding:0 20px 20px">${this.rerunHtml(true)}</div></div>${this.insightHtml()}`;
     }
     if (ev.status === 'error') {
       return `<div class="cqa-panel cqa-panel-pad"><div class="cqa-error-box">${icon('alert')} Оценка не удалась: ${esc(ev.error || 'неизвестная ошибка')}</div>
-        <div style="margin-top:14px">${this.rerunHtml(true)}</div></div>`;
+        <div style="margin-top:14px">${this.rerunHtml(true)}</div></div>${this.insightHtml()}`;
     }
     const fin = ev.final || ev.original || {};
     const orig = ev.original || fin;
@@ -304,6 +380,7 @@ class Card extends CqaElement {
     return `
       ${this.grossHtml(fin)}
       ${this.heroHtml(orig, fin, crits, totalChanged || changedCrit.length > 0)}
+      ${this.insightHtml()}
       ${this.metaHtml()}
       ${this.criteriaHtml(crits)}`;
   }
@@ -443,6 +520,7 @@ class Card extends CqaElement {
       ${v.orig.explanation ? `<p class="cqa-pop-text">${linkifyRefs(v.orig.explanation, n)}</p>` : ''}
       ${ev.length ? `<div class="cqa-crit-ev"><span class="cqa-ev-label">${esc(evidenceLabel(v.crit, v.orig.answer))}</span>${this.chipsHtml(ev)}</div>` : ''}
       ${c.reused_from != null ? `<p class="cqa-faint">Перенесено из оценки №${esc(c.reused_from)}: определение не менялось.</p>` : ''}
+      ${this.coachingHtml(c.id)}
       ${this.appealHtml(c, v.crit)}`;
   }
 
@@ -573,7 +651,7 @@ class Card extends CqaElement {
   focusReply(k) {
     const el = this.querySelector(`.cqa-transcript [data-n="${k}"]`);
     if (!el) return;
-    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    el.scrollIntoView({ behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth', block: 'center' });
     el.classList.remove('is-flash'); void el.offsetWidth; el.classList.add('is-flash');
     const m = (this.s.conv.transcript || []).find((x) => x.n === k);
     if (this.audio && m?.audio_offset != null) this.seek(m.audio_offset - 2);
@@ -664,6 +742,14 @@ class Card extends CqaElement {
       else if (a === 'translation-original' || a === 'translation-show') {
         this.s.showTranslation = a === 'translation-show';
         this.updateTranslation();
+      }
+      else if (a === 'insight-start') this.startInsight();
+      else if (a === 'insight-toggle') {
+        this.s.insightOpen = !this.s.insightOpen;
+        const section = act.closest('.cqa-insight');
+        section.classList.toggle('is-expanded', this.s.insightOpen);
+        act.setAttribute('aria-expanded', String(this.s.insightOpen));
+        section.querySelector('.cqa-insight-detail').inert = !this.s.insightOpen;
       }
       else if (a === 'pop-close') this.closePop();
       else if (a === 'thinking-open' || a === 'thinking-tab') {

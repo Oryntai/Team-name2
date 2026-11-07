@@ -25,7 +25,7 @@ from pydantic import BaseModel, Field
 from starlette.background import BackgroundTask
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from . import assist, audio, callmetrics, judge, pii, sandbox, sources, translate
+from . import assist, audio, callmetrics, insights, judge, pii, sandbox, sources, translate
 from .checklist import allowed_answers, normalize, validate
 from .db import DB
 from .judge.providers import env as read_env
@@ -60,6 +60,11 @@ class RunIn(BaseModel):
     provider: str | None = None
     mode: Literal["full", "incremental"] = "incremental"
     votes: int | None = Field(default=None, ge=1, le=5, strict=True)
+
+
+class InsightsIn(BaseModel):
+    conversation_ids: list[str] | None = None
+    dataset_id: str | None = None
 
 
 class ChecklistIn(BaseModel):
@@ -149,16 +154,22 @@ def create_app(db_path: str | os.PathLike | None = None, *, web_dir: str | os.Pa
             log.warning("data/dev.json не загружен: %s", e)
 
     runner = Runner(db)
+    insights_runner = insights.InsightsRunner(db)
+    db.fail_interrupted_insights()
 
     @contextlib.asynccontextmanager
     async def lifespan(_app):
         yield
+        for t in list(insights_runner.tasks):
+            t.cancel()
+        await insights_runner.wait()
         for t in list(runner.tasks):  # остановка сервера: незаконченные прогоны при старте пометятся ошибкой
             t.cancel()
 
     app = FastAPI(title="CQA — Conversation Quality Analytics", version="0.1.0", lifespan=lifespan)
     app.state.db, app.state.runner = db, runner
     translation_locks: dict[str, asyncio.Lock] = {}
+    app.state.insights_runner = insights_runner
     app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
     app.add_middleware(CacheHeaders)
 
@@ -456,6 +467,46 @@ def create_app(db_path: str | os.PathLike | None = None, *, web_dir: str | os.Pa
         if not ev:
             _fail(404, f"Оценка {ev_id} не найдена.")
         return eval_detail(ev)
+
+    @app.post("/api/insights/run", status_code=202)
+    async def start_insights(body: InsightsIn):
+        if body.conversation_ids is not None:
+            ids = list(dict.fromkeys(x.strip() for x in body.conversation_ids if x.strip()))
+        elif body.dataset_id:
+            ids = db.conversation_ids(body.dataset_id)
+        else:
+            ids = []
+        if not ids:
+            _fail(422, "Выберите диалоги или набор для разбора.")
+        snapshots = []
+        for cid in ids:
+            rec = db.record(cid)
+            if not rec or (body.dataset_id and db.conversation(cid)["dataset_id"] != body.dataset_id):
+                _fail(422, f"Диалог {cid} не найден в выбранном наборе.")
+            row = db.one("SELECT id FROM evaluations WHERE conversation_id=? AND status='ok' ORDER BY id DESC LIMIT 1", (cid,))
+            if not row:
+                _fail(422, f"Сначала оцените диалог {cid}.")
+            ev = db.evaluation(row["id"])
+            snapshots.append((rec, ev, db.checklist(ev["checklist_id"])["config"]))
+        pid = default_provider()
+        if pid not in visible_providers() or not judge.available(pid):
+            _fail(422, "Модель разбора недоступна. Проверьте модель по умолчанию в настройках.")
+        try:
+            provider = judge.get_provider(pid)
+            insight_ids = insights_runner.start(snapshots, provider)
+        except judge.ProviderError as e:
+            _fail(422, str(e))
+        return {"insight_ids": insight_ids, "conversation_ids": ids}
+
+    @app.get("/api/insights")
+    async def list_insights(dataset_id: str | None = None):
+        return db.list_insights(dataset_id)
+
+    @app.get("/api/insights/{conversation_id}")
+    async def get_insight(conversation_id: str):
+        if not db.conversation(conversation_id):
+            _fail(404, "Диалог не найден.")
+        return db.latest_insight(conversation_id)
 
     def run_input(body: RunIn):
         if body.checklist_id is None:
