@@ -521,7 +521,7 @@ def create_app(db_path: str | os.PathLike | None = None, *, web_dir: str | os.Pa
         if not c:
             _fail(404, f"Диалог {cid} не найден.")
         tr = c["transcript"]
-        offs = audio.audio_offsets(tr)
+        offs = audio.audio_offsets(tr, cid)
         items = [{"n": i, "timestamp": t.get("timestamp"), "speaker": t.get("speaker"), "text": t.get("text"),
                   "audio_offset": offs[i - 1], "pii": pii.find(t.get("text") or "")} for i, t in enumerate(tr, 1)]
         has_audio = bool(c["audio_url"]) or bool(has_local_audio(cid))

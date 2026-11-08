@@ -3,12 +3,17 @@
 Секунда в mp3 = сумма окон записи до момента реплики. Окна берём из системных событий звонка:
 «Запись и транскрибирование запущены» → «…приостановлены», «…возобновлены» → конец разговора.
 Реплики до старта записи → 0; реплика во время паузы → место, где запись продолжилась.
-Длина mp3 по кадрам на DEV больше суммы окон на 1–7 с, поэтому плеер стоит запускать на 2–3 с раньше.
+Длина mp3 по кадрам на DEV больше суммы окон на 1–7 с, а метка реплики в CRM ближе к концу фразы.
+Поэтому для звонков DEV есть точные секунды: `audio_align.json` рядом (whisper + сопоставление текста,
+пересборка — `lab/audio_align.py`). Где точной секунды нет — прежняя оценка по окнам записи.
 """
 from __future__ import annotations
 
 import datetime as dt
+import functools
 import html
+import json
+import pathlib
 import re
 import time
 
@@ -113,8 +118,8 @@ def recording_windows(transcript: list[dict]) -> list[tuple[dt.datetime, dt.date
     return windows
 
 
-def audio_offsets(transcript: list[dict]) -> list[float | None]:
-    """Секунда в записи для каждой реплики звонка; у чатов — None."""
+def estimate_offsets(transcript: list[dict]) -> list[float | None]:
+    """Оценка секунды в записи по окнам записи (для каждой реплики звонка; у чатов — None)."""
     windows = recording_windows(transcript)
     if not windows:
         return [None] * len(transcript)
@@ -128,6 +133,35 @@ def audio_offsets(transcript: list[dict]) -> list[float | None]:
             s += (min(ts, we) - ws).total_seconds()
         out.append(round(s, 1))
     return out
+
+
+ALIGN_PATH = pathlib.Path(__file__).with_name("audio_align.json")
+
+
+@functools.lru_cache(maxsize=4)
+def load_exact(path: pathlib.Path = ALIGN_PATH) -> dict[str, list]:
+    """Точные секунды реплик {conversation_id: [секунда или None по индексу реплики]}; нет файла — пусто."""
+    try:
+        d = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    return {k: v for k, v in d.items() if isinstance(v, list)} if isinstance(d, dict) else {}
+
+
+def audio_offsets(transcript: list[dict], cid: str | None = None,
+                  exact: dict[str, list] | None = None) -> list[float | None]:
+    """Секунда в записи для каждой реплики звонка; у чатов — None.
+
+    Точная секунда (whisper) — если она есть для этого звонка и число реплик совпадает; иначе оценка по окнам.
+    """
+    est = estimate_offsets(transcript)
+    if cid is None:
+        return est
+    ex = (load_exact() if exact is None else exact).get(cid)
+    if not isinstance(ex, list) or len(ex) != len(transcript):
+        return est
+    return [round(float(x), 1) if e is not None and isinstance(x, (int, float)) and not isinstance(x, bool) and x >= 0
+            else e for x, e in zip(ex, est)]
 
 
 def recorded_seconds(transcript: list[dict]) -> float:
