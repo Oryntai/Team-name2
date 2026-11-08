@@ -25,8 +25,8 @@ from pydantic import BaseModel, Field
 from starlette.background import BackgroundTask
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from . import (analytics, ask, assist, audio, calibrations, callmetrics, crittest, doubts, insights, judge, pii,
-               precedents, sandbox, sources, translate)
+from . import (analytics, ask, assist, audio, calibrations, callmetrics, crittest, doubts, guard, insights, judge,
+               pii, precedents, sandbox, sources, translate)
 from .checklist import allowed_answers, normalize, validate
 from .db import DB
 from .judge.providers import env as read_env
@@ -173,6 +173,13 @@ def _fail(status: int, message: str, errors: list[str] | None = None):
 
 class TranslateIn(BaseModel):
     provider: Literal["haiku", "fake"] = "haiku"
+
+
+class GuardIn(BaseModel):
+    conversation_id: str = Field(min_length=1, max_length=128)
+    upto: int = Field(ge=0, strict=True)  # сколько реплик диалога идут до черновика
+    draft: str = Field(min_length=1, max_length=4000)
+    provider: str | None = None
 
 
 def create_app(db_path: str | os.PathLike | None = None, *, web_dir: str | os.PathLike | None = None,
@@ -967,6 +974,28 @@ def create_app(db_path: str | os.PathLike | None = None, *, web_dir: str | os.Pa
             db.decide_appeal(a_id, "changed", body.answer, reason)
         ev = db.evaluation(ev["id"])
         return {"appeal": appeal_full(db.appeal(a_id), ev), "evaluation": eval_detail(ev)}
+
+    @app.post("/api/guard")
+    async def guard_check(body: GuardIn):
+        """Щит до отправки: черновик ответа оператора по действующему чек-листу (cqa/guard.py)."""
+        rec = db.record(body.conversation_id)
+        if not rec:
+            _fail(404, f"Диалог {body.conversation_id} не найден.")
+        cl = checklist(max(c["id"] for c in db.list_checklists()))
+        # как «Спросить ИИ»: Haiku; fake — только явно для тестов
+        pid = body.provider or ("fake" if allow_fake and default_provider() == "fake" else "haiku")
+        if pid not in visible_providers():
+            _fail(422, f"Неизвестная модель «{pid}».")
+        if not judge.available(pid):
+            _fail(422, "Модель недоступна: проверьте настройки провайдера.")
+        try:
+            provider = guard.FakeGuardProvider() if pid == "fake" else judge.get_provider(pid)
+            return {**await guard.check(rec, body.upto, body.draft, cl["config"], provider),
+                    "checklist_label": label(cl)}
+        except ValueError as e:
+            _fail(422, str(e))
+        except judge.ProviderError as e:
+            _fail(502, str(e))
 
     @app.get("/api/audio/{cid}")
     async def audio_file(cid: str, request: Request):

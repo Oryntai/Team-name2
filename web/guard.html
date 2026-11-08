@@ -1,0 +1,258 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Щит до отправки</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%230f3d2e'/%3E%3Cpath d='M9 16.5l4.2 4.2L23 11' fill='none' stroke='%23b8e3a0' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+  <style>
+    * { box-sizing: border-box; }
+    body { margin: 0; background: #f3f6f4; color: #13221b; font: 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+    main { max-width: 852px; margin: 28px auto; padding: 0 16px; }
+    header { margin-bottom: 20px; }
+    a { color: #14503b; font-size: 13px; }
+    h1 { margin: 8px 0; font-size: 28px; line-height: 1.2; }
+    p { margin: 6px 0; }
+    .muted, .meta { color: #637369; }
+    .panel { padding: 20px; background: #ffffff; border: 1px solid #dbe4df; border-radius: 12px; }
+    .selectors { display: grid; grid-template-columns: 1fr 1.3fr; gap: 14px; }
+    .selectors > div { min-width: 0; }
+    label, h2 { display: block; margin: 0 0 6px; font-size: 14px; font-weight: 650; }
+    select, textarea, button { font: inherit; border-radius: 10px; }
+    select, textarea { width: 100%; min-width: 0; padding: 10px; color: #13221b; background: #ffffff; border: 1px solid #dbe4df; }
+    select { text-overflow: ellipsis; }
+    textarea { display: block; resize: vertical; min-height: 108px; }
+    :focus-visible { outline: 2px solid #14503b; outline-offset: 3px; }
+    button { padding: 9px 18px; background: #14503b; color: white; border: 0; font-weight: 600; cursor: pointer; }
+    button:hover { background: #1a6847; }
+    button:disabled { opacity: .6; cursor: default; }
+    .context { margin: 18px 0; }
+    .transcript { max-height: 250px; overflow-y: auto; border: 1px solid #dbe4df; border-radius: 10px; padding: 10px; background: #f3f6f4; }
+    .message { max-width: 94%; margin: 0 0 8px; padding: 8px 12px; border: 1px solid #dbe4df; border-radius: 10px; background: #ffffff; }
+    .message:last-child { margin-bottom: 0; }
+    .message.operator { margin-left: auto; background: #e0f2e7; }
+    .message.quiet { color: #637369; background: transparent; border-style: dashed; }
+    .message small { display: block; margin-bottom: 3px; color: #637369; font-size: 12px; }
+    .text { white-space: pre-wrap; overflow-wrap: anywhere; }
+    .actions { display: flex; align-items: center; gap: 12px; margin-top: 12px; }
+    .actions small { color: #637369; }
+    #result:not(:empty) { margin-top: 16px; }
+    .notice, .rewrite { padding: 14px 16px; border: 1px solid; border-radius: 10px; margin-bottom: 10px; overflow-wrap: anywhere; }
+    .issue { color: #c33246; background: #fce7ea; border-color: #f2bfc7; }
+    .success { color: #1b7f50; background: #e0f2e7; border-color: #b2dcc3; }
+    .warning { color: #a86c12; background: #fcf0d8; border-color: #eed39f; }
+    .notice h3 { margin: 0 0 8px; font-size: 18px; line-height: 1.3; }
+    mark { display: inline; background: #f2bfc7; color: #13221b; padding: 1px 3px; }
+    .quote { margin: 10px 0; }
+    .rewrite { color: #13221b; background: #ffffff; border-color: #dbe4df; }
+    .rewrite button { margin-top: 10px; }
+    .meta { font-size: 12px; overflow-wrap: anywhere; }
+    @media (max-width: 600px) {
+      main { margin: 20px auto; }
+      .panel { padding: 16px; }
+      .selectors { grid-template-columns: 1fr; }
+      h1 { font-size: 25px; }
+      .actions { flex-wrap: wrap; }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <a href="/">← К оценке диалогов</a>
+      <h1>Щит до отправки</h1>
+      <p class="muted">Тот же чек-лист, что оценивает диалог после разговора, проверяет ответ оператора до отправки.</p>
+    </header>
+    <form id="guard" class="panel" novalidate>
+      <div class="selectors">
+        <div><label for="conversation">Диалог</label><select id="conversation" disabled><option>Загружаю…</option></select></div>
+        <div><label for="position">Черновик вместо реплики</label><select id="position" disabled><option>Выберите диалог</option></select></div>
+      </div>
+      <section class="context" aria-labelledby="context-title">
+        <h2 id="context-title">Диалог до ответа</h2>
+        <div id="transcript" class="transcript" tabindex="0" aria-label="Реплики до черновика"><p class="muted">Загружаю диалоги…</p></div>
+      </section>
+      <label for="draft">Черновик ответа</label>
+      <textarea id="draft" rows="4" placeholder="Напишите ответ клиенту…" disabled></textarea>
+      <div class="actions"><button id="check" type="submit" disabled>Проверить</button><small>Ctrl / ⌘ + Enter — проверить</small></div>
+    </form>
+    <section id="result" aria-live="polite" aria-atomic="true" aria-label="Результат проверки"></section>
+  </main>
+  <script>
+    const byId = id => document.getElementById(id);
+    const conversation = byId('conversation'), position = byId('position');
+    const draft = byId('draft'), check = byId('check'), result = byId('result');
+    const transcript = byId('transcript'), params = new URLSearchParams(location.search);
+    const roles = { client: 'клиент', operator: 'оператор', bot: 'бот', system: 'система' };
+    let messages = [], upto = 0, ready = false, busy = false;
+    let detailController, guardController, revision = 0;
+
+    function element(tag, text, className) {
+      const node = document.createElement(tag);
+      if (text !== undefined) node.textContent = text;
+      if (className) node.className = className;
+      return node;
+    }
+    function buttonState() {
+      check.disabled = !ready || busy;
+      check.textContent = busy ? 'Проверяю…' : 'Проверить';
+    }
+    function clearResult() {
+      // Отмена и версия защищают от запоздалого ответа после смены черновика.
+      revision++;
+      if (guardController) guardController.abort();
+      busy = false;
+      result.replaceChildren();
+      buttonState();
+    }
+    function warning(text) {
+      result.replaceChildren(element('div', text, 'notice warning text'));
+    }
+    async function request(url, options = {}) {
+      const response = await fetch(url, options);
+      let data;
+      try { data = await response.json(); }
+      catch { throw new Error('Не удалось прочитать ответ сервера. Попробуйте ещё раз.'); }
+      if (!response.ok) throw new Error(typeof data.detail === 'string' ? data.detail : 'Ошибка сервера. Попробуйте ещё раз.');
+      return data;
+    }
+    function errorText(error) {
+      return error instanceof TypeError ? 'Нет связи с сервером. Попробуйте ещё раз.' : error.message;
+    }
+    function selectPosition() {
+      clearResult();
+      const selected = position.selectedOptions[0];
+      upto = Number(selected.value);
+      draft.value = selected.dataset.draft || '';
+      transcript.replaceChildren();
+      messages.slice(0, upto).forEach(message => {
+        const kind = message.speaker === 'operator' ? 'operator' : message.speaker === 'client' ? '' : 'quiet';
+        const card = element('div', undefined, 'message ' + kind);
+        card.append(element('small', '№' + message.n + ' · ' + (roles[message.speaker] || 'система')),
+          element('div', message.text, 'text'));
+        transcript.append(card);
+      });
+      if (!upto) transcript.append(element('p', 'До черновика реплик нет.', 'muted'));
+      transcript.scrollTop = transcript.scrollHeight;
+    }
+    async function loadConversation(preferredNumber) {
+      if (detailController) detailController.abort();
+      const controller = new AbortController();
+      detailController = controller;
+      ready = false;
+      clearResult();
+      position.disabled = draft.disabled = true;
+      position.replaceChildren(element('option', 'Загружаю…'));
+      draft.value = '';
+      transcript.replaceChildren(element('p', 'Загружаю диалог…', 'muted'));
+      try {
+        const data = await request('/api/conversations/' + encodeURIComponent(conversation.value), { signal: controller.signal });
+        if (controller.signal.aborted) return false;
+        messages = data.transcript;
+        position.replaceChildren();
+        let preferred;
+        messages.filter(message => message.speaker === 'operator').forEach(message => {
+          const text = (message.text || '').replace(/\s+/g, ' ').trim();
+          const option = element('option', '№' + message.n + ' · ' + text.slice(0, 60) + (text.length > 60 ? '…' : ''));
+          option.value = String(message.n - 1);
+          option.dataset.draft = message.text || '';
+          if (String(message.n) === preferredNumber) preferred = option;
+          position.append(option);
+        });
+        const end = element('option', 'в конце диалога (новая реплика)');
+        end.value = String(messages.length);
+        position.append(end);
+        if (preferred) preferred.selected = true;
+        ready = true;
+        position.disabled = draft.disabled = false;
+        selectPosition();
+        return true;
+      } catch (error) {
+        if (controller.signal.aborted) return false;
+        position.replaceChildren(element('option', 'Диалог не загружен'));
+        transcript.replaceChildren(element('p', 'Выберите диалог повторно.', 'muted'));
+        warning(errorText(error));
+        return false;
+      }
+    }
+    function showResult(data) {
+      result.replaceChildren();
+      if (data.ok) {
+        const notice = element('div', undefined, 'notice success');
+        notice.append(element('h3', 'Нарушений не найдено'),
+          element('small', 'Проверено: ' + data.checked.map(item => item.id + ' ' + item.title).join(', ')));
+        result.append(notice);
+      } else {
+        data.issues.forEach(issue => {
+          const notice = element('div', undefined, 'notice issue');
+          notice.append(element('h3', issue.criterion_id + ' · ' + issue.title), element('p', 'Почему: ' + issue.why, 'text'));
+          if (issue.quote) {
+            const quote = element('p', undefined, 'quote text');
+            quote.append(element('mark', '«' + issue.quote + '»'));
+            notice.append(quote);
+          }
+          notice.append(element('p', 'Как надо: ' + issue.fix, 'text'));
+          result.append(notice);
+        });
+        if (data.rewrite) {
+          const block = element('div', undefined, 'rewrite');
+          const insert = element('button', 'Подставить');
+          insert.type = 'button';
+          insert.addEventListener('click', () => { draft.value = data.rewrite; clearResult(); draft.focus(); });
+          block.append(element('h2', 'Вариант ответа'), element('p', data.rewrite, 'text'), insert);
+          result.append(block);
+        }
+      }
+      result.append(element('p', data.checklist_label + ' · ' + data.model + ' · ' + data.latency_s + ' с · $' + Number(data.cost_usd).toFixed(4), 'meta'));
+    }
+    async function runCheck() {
+      if (!ready || busy) return;
+      clearResult();
+      if (!draft.value.trim()) { warning('Введите черновик ответа.'); draft.focus(); return; }
+      const version = revision;
+      guardController = new AbortController();
+      busy = true;
+      buttonState();
+      try {
+        const data = await request('/api/guard', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' }, signal: guardController.signal,
+          body: JSON.stringify({ conversation_id: conversation.value, upto, draft: draft.value })
+        });
+        if (version === revision) showResult(data);
+      } catch (error) {
+        if (version === revision && error.name !== 'AbortError') warning(errorText(error));
+      } finally {
+        if (version === revision) { busy = false; buttonState(); }
+      }
+    }
+    byId('guard').addEventListener('submit', event => { event.preventDefault(); runCheck(); });
+    draft.addEventListener('keydown', event => {
+      if ((event.ctrlKey || event.metaKey) && event.key === 'Enter' && !event.isComposing) { event.preventDefault(); runCheck(); }
+    });
+    draft.addEventListener('input', clearResult);
+    conversation.addEventListener('change', () => loadConversation());
+    position.addEventListener('change', selectPosition);
+    async function init() {
+      try {
+        const list = await request('/api/conversations');
+        conversation.replaceChildren();
+        list.sort((a, b) => a.id.localeCompare(b.id)).forEach(item => {
+          const option = element('option', item.id + ' · ' + item.language + ' · ' + (item.channel === 'voice call' ? 'звонок' : 'чат'));
+          option.value = item.id;
+          conversation.append(option);
+        });
+        if (!list.length) throw new Error('Диалогов пока нет.');
+        conversation.disabled = false;
+        if (list.some(item => item.id === params.get('c'))) conversation.value = params.get('c');
+        const loaded = await loadConversation(params.get('n'));
+        if (loaded && params.get('go') === '1') runCheck();
+      } catch (error) {
+        conversation.replaceChildren(element('option', 'Нет диалогов'));
+        transcript.replaceChildren(element('p', 'Обновите страницу, чтобы повторить загрузку.', 'muted'));
+        warning(errorText(error));
+      }
+    }
+    init();
+  </script>
+</body>
+</html>
