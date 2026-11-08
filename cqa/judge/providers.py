@@ -3,10 +3,14 @@
 Ключи и адреса — из окружения или файла .env в корне проекта (в git не идёт):
   ANTHROPIC_API_KEY — для haiku / sonnet;
   CQA_LOCAL_BASE_URL, CQA_LOCAL_MODEL, CQA_LOCAL_API_KEY — для local (vLLM, llama.cpp server, Ollama, LM Studio, MLX).
+Для общего демо-сервера (по умолчанию выключены):
+  CQA_PROVIDERS — какие модели можно выбрать, через запятую (например «haiku»);
+  CQA_BUDGET_USD — потолок трат на Claude за сутки (UTC), $.
 """
 from __future__ import annotations
 
 import asyncio
+import datetime as dt
 import json
 import os
 import pathlib
@@ -55,7 +59,15 @@ def env(key: str, default: str | None = None) -> str | None:
     return default
 
 
+def allowed(pid: str) -> bool:
+    """CQA_PROVIDERS не задан — разрешены все модели; задан — только перечисленные."""
+    only = {p.strip() for p in (env("CQA_PROVIDERS") or "").split(",") if p.strip()}
+    return not only or pid in only
+
+
 def available(pid: str) -> bool:
+    if not allowed(pid):
+        return False
     kind = PROVIDERS.get(pid, {}).get("kind")
     if kind == "anthropic":
         return bool(env("ANTHROPIC_API_KEY"))
@@ -74,6 +86,35 @@ def cost_usd(pid: str, r: Reply) -> float:
     pin, pout = p["price_in"], p["price_out"]
     return round((r.input_tokens * pin + r.cache_write * pin * 1.25 + r.cache_read * pin * 0.1
                   + r.output_tokens * pout) / 1e6, 6)
+
+
+# Траты на Claude за текущие сутки (UTC) — для CQA_BUDGET_USD. Считаются в памяти процесса по токенам ответов,
+# после перезапуска сервера счёт начинается заново.
+_SPENT = {"day": "", "usd": 0.0}
+
+
+def _spent_today() -> float:
+    day = dt.datetime.now(dt.timezone.utc).date().isoformat()
+    if _SPENT["day"] != day:
+        _SPENT.update(day=day, usd=0.0)
+    return _SPENT["usd"]
+
+
+def check_budget() -> None:
+    raw = env("CQA_BUDGET_USD")
+    if not raw:
+        return
+    try:
+        limit = float(raw)
+    except ValueError as e:
+        raise ProviderError(f"CQA_BUDGET_USD: ожидалось число долларов, а не «{raw}».") from e
+    if _spent_today() >= limit:
+        raise ProviderError(f"Исчерпан дневной лимит трат на модель (${limit:g}) — попробуйте завтра.")
+
+
+def spend(pid: str, r: Reply) -> None:
+    _spent_today()
+    _SPENT["usd"] += cost_usd(pid, r)
 
 
 class AnthropicProvider:
@@ -96,6 +137,7 @@ class AnthropicProvider:
 
     async def complete(self, system: str, user: str, schema: dict, max_tokens: int = 16000) -> Reply:
         import anthropic
+        check_budget()
         client = self._client()
         kw = dict(model=self.model, max_tokens=max_tokens,
                   system=[{"type": "text", "text": system, "cache_control": {"type": "ephemeral"}}],
@@ -117,16 +159,19 @@ class AnthropicProvider:
             raise ProviderError(f"Claude API {e.status_code}: {str(e.message)[:300]}") from e
         except anthropic.APIConnectionError as e:
             raise ProviderError(f"Нет связи с Claude API: {e}") from e
+        text = next((b.text for b in r.content if b.type == "text"), "")
+        thinking = "\n\n".join(b.thinking for b in r.content if b.type == "thinking" and getattr(b, "thinking", None))
+        u = r.usage
+        reply = Reply(text=text, model=r.model, input_tokens=u.input_tokens or 0, output_tokens=u.output_tokens or 0,
+                      cache_read=getattr(u, "cache_read_input_tokens", 0) or 0,
+                      cache_write=getattr(u, "cache_creation_input_tokens", 0) or 0, stop=r.stop_reason,
+                      thinking=thinking)
+        spend(self.pid, reply)  # токены оплачены и при отказе или обрезке
         if r.stop_reason == "refusal":
             raise ProviderError("Модель отказалась оценивать диалог (refusal).")
         if r.stop_reason == "max_tokens":
             raise ProviderError("Ответ модели обрезан (max_tokens).")
-        text = next((b.text for b in r.content if b.type == "text"), "")
-        thinking = "\n\n".join(b.thinking for b in r.content if b.type == "thinking" and getattr(b, "thinking", None))
-        u = r.usage
-        return Reply(text=text, model=r.model, input_tokens=u.input_tokens or 0, output_tokens=u.output_tokens or 0,
-                     cache_read=getattr(u, "cache_read_input_tokens", 0) or 0,
-                     cache_write=getattr(u, "cache_creation_input_tokens", 0) or 0, stop=r.stop_reason, thinking=thinking)
+        return reply
 
 
 class OpenAICompatProvider:

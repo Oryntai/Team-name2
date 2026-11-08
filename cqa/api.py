@@ -245,7 +245,8 @@ def create_app(db_path: str | os.PathLike | None = None, *, web_dir: str | os.Pa
         return db.get_setting("dataset_url") or read_env("CQA_DATASET_URL")
 
     def visible_providers() -> list[str]:
-        return [pid for pid, p in judge.PROVIDERS.items() if not p.get("hidden") or (allow_fake and pid == "fake")]
+        return [pid for pid, p in judge.PROVIDERS.items()
+                if judge.allowed(pid) and (not p.get("hidden") or (allow_fake and pid == "fake"))]
 
     def default_provider() -> str:
         p = db.get_setting("default_provider")
